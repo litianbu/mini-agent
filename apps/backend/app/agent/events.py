@@ -1,6 +1,6 @@
 """事件契约 —— 整个项目最重要的一个文件。
 
-前后端只通过这 5 种事件通信。它同时是三样东西：
+前后端只通过这 7 种事件通信。它同时是三样东西：
   1. 后端产出事件时的类型约束
   2. 自动生成的 API 文档（FastAPI 会把它们放进 /openapi.json）
   3. 前端 src/types.ts 手写镜像的出处（改这里就要改那里）
@@ -8,7 +8,7 @@
 为什么要"事件"而不是直接返回一段文字？
   因为流的本质是"过程"，一段字符串丢掉了过程：
   什么时候开始、正在想还是在答、为什么结束 ——
-  这些信息后面加工具调用时全都要用到。
+  这些信息加工具调用后全都要用到。
 """
 
 from __future__ import annotations
@@ -40,6 +40,35 @@ class ReasoningEvent(BaseModel):
     delta: str
 
 
+class ToolCallEvent(BaseModel):
+    """模型决定调用某个工具（S3 新增）。
+
+    这是"它想做什么"，不是"做成了什么"。
+    分开是有意的：前端可以先显示"正在读取 app/main.py…"，
+    等结果回来再补上成功/失败。
+    """
+
+    type: Literal["tool_call"] = "tool_call"
+    id: str
+    name: str
+    arguments: str  # 原始 JSON 字符串，原样透传，前端想展示就展示
+
+
+class ToolResultEvent(BaseModel):
+    """工具执行完的结果（S3 新增）。
+
+    output 已经是字符串 —— 工具负责把结果整理成模型能读懂的样子。
+    ok 用来区分"执行成功"和"执行了但报错"，
+    前端可以据此上色（红/绿）。
+    """
+
+    type: Literal["tool_result"] = "tool_result"
+    id: str
+    name: str
+    ok: bool
+    output: str
+
+
 class DoneEvent(BaseModel):
     """正常结束。带统计信息，方便你在界面上看到"这次花了多久"。"""
 
@@ -47,6 +76,7 @@ class DoneEvent(BaseModel):
     finish_reason: str | None = None
     ms: int = 0
     chars: int = 0
+    rounds: int = 0  # 循环了几轮（一次工具调用算多轮），排查用
 
 
 class ErrorEvent(BaseModel):
@@ -61,7 +91,15 @@ class ErrorEvent(BaseModel):
 
 
 AgentEvent = Annotated[
-    Union[StartEvent, TextEvent, ReasoningEvent, DoneEvent, ErrorEvent],
+    Union[
+        StartEvent,
+        TextEvent,
+        ReasoningEvent,
+        ToolCallEvent,
+        ToolResultEvent,
+        DoneEvent,
+        ErrorEvent,
+    ],
     Field(discriminator="type"),
 ]
 

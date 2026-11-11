@@ -20,7 +20,8 @@ from collections.abc import AsyncIterator
 import httpx
 
 from ...core.config import settings
-from ..delta import Delta
+from ..delta import Delta, ToolCallDelta
+from ..tools import schemas
 from .mock import mock_deltas
 from .sse import iter_frames
 
@@ -47,6 +48,9 @@ async def real_deltas(messages: list[dict]) -> AsyncIterator[Delta]:
         "stream": True,
         # 让最后一帧带上 token 用量（不加的话 usage 永远是 null）
         "stream_options": {"include_usage": True},
+        # S3：把工具清单告诉模型。它据此决定要不要调用、调哪个。
+        "tools": schemas(),
+        "tool_choice": "auto",
     }
     # DeepSeek 的思考模式是个非标准扩展，只有它的接口认这个字段
     if settings.thinking and "deepseek" in settings.llm_base_url:
@@ -90,9 +94,21 @@ def parse_chunk(raw: str) -> list[Delta]:
     text = delta.get("content") or ""
     finish = choice.get("finish_reason")
 
-    if not (reasoning or text or finish):
+    # S3：工具调用碎片。注意这里是**数组**，模型可以同时调多个工具，
+    # 每个碎片带自己的 index —— 上层按 index 分组累积。
+    calls = [
+        ToolCallDelta(
+            index=int(item.get("index", 0)),
+            id=item.get("id") or "",
+            name=(item.get("function") or {}).get("name") or "",
+            arguments=(item.get("function") or {}).get("arguments") or "",
+        )
+        for item in (delta.get("tool_calls") or [])
+    ]
+
+    if not (reasoning or text or finish or calls):
         return []
-    return [Delta(reasoning=reasoning, text=text, finish_reason=finish)]
+    return [Delta(reasoning=reasoning, text=text, tool_calls=calls, finish_reason=finish)]
 
 
 def explain(exc: BaseException) -> str:
