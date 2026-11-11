@@ -9,7 +9,7 @@
  * 这就是好分层的样子：想改界面来这里，想改行为去 hook。
  */
 import { useState } from "react";
-import { Alert, Button, Card, Flex, Input, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Flex, Input, Space, Tag, Timeline, Typography } from "antd";
 import { useChatStream } from "../hooks/useChatStream";
 
 const STATUS_TAG = {
@@ -70,13 +70,51 @@ export default function NewSessionPage() {
             </Card>
           )}
 
+          {chat.tools.length > 0 && (
+            <Card
+              size="small"
+              title={<Typography.Text type="secondary">工具调用</Typography.Text>}
+              style={{ marginBottom: 16 }}
+            >
+              <Timeline
+                items={chat.tools.map((t) => ({
+                  // 结果还没回来时显示"进行中"，回来后按成功/失败上色
+                  color: t.done ? (t.ok ? "green" : "red") : "blue",
+                  children: (
+                    <Flex vertical gap={2}>
+                      <Typography.Text code>{t.name}</Typography.Text>
+                      <Typography.Text
+                        type="secondary"
+                        style={{ fontSize: 12, wordBreak: "break-all" }}
+                      >
+                        {t.arguments}
+                      </Typography.Text>
+                      {t.done && (
+                        <Typography.Text
+                          style={{
+                            fontSize: 12,
+                            whiteSpace: "pre-wrap",
+                            color: t.ok ? undefined : "#ff7875",
+                          }}
+                        >
+                          {t.output.slice(0, 300)}
+                          {t.output.length > 300 ? "…" : ""}
+                        </Typography.Text>
+                      )}
+                    </Flex>
+                  ),
+                }))}
+              />
+            </Card>
+          )}
+
           {chat.text && (
             <Typography.Paragraph style={{ whiteSpace: "pre-wrap", fontSize: 15 }}>
               {chat.text}
             </Typography.Paragraph>
           )}
 
-          {!chat.text && !chat.reasoning && (
+          {!chat.text && !chat.reasoning && chat.tools.length === 0 && (
             <Typography.Text type="secondary">
               在下面问一句试试 —— 文字会一个字一个字出现。
             </Typography.Text>

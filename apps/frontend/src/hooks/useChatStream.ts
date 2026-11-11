@@ -10,6 +10,7 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { chatStream, type ChatStreamState } from "../api";
+import type { ToolStep } from "../types";
 
 export interface ChatStream extends ChatStreamState {
   busy: boolean;
@@ -24,6 +25,7 @@ export function useChatStream(): ChatStream {
   const [model, setModel] = useState("—");
   const [meta, setMeta] = useState("");
   const [error, setError] = useState("");
+  const [tools, setTools] = useState<ToolStep[]>([]);
 
   const aborter = useRef<AbortController | null>(null);
 
@@ -42,6 +44,7 @@ export function useChatStream(): ChatStream {
     setReasoning("");
     setMeta("");
     setError("");
+    setTools([]);
     setStatus("streaming");
 
     const ctrl = new AbortController();
@@ -61,10 +64,34 @@ export function useChatStream(): ChatStream {
             case "reasoning":
               setReasoning((r) => r + ev.delta);
               break;
+            case "tool_call":
+              // 先是"它要做什么"。结果还没回来，先记成 done=false
+              setTools((list) => [
+                ...list,
+                {
+                  id: ev.id,
+                  name: ev.name,
+                  arguments: ev.arguments,
+                  done: false,
+                  ok: false,
+                  output: "",
+                },
+              ]);
+              break;
+            case "tool_result":
+              // 结果回来，按 id 找到那条记录补上
+              setTools((list) =>
+                list.map((t) =>
+                  t.id === ev.id
+                    ? { ...t, done: true, ok: ev.ok, output: ev.output }
+                    : t,
+                ),
+              );
+              break;
             case "done":
               setStatus("done");
               setMeta(
-                `${ev.finish_reason ?? "?"} · ${ev.chars} 字 · ${ev.ms}ms`,
+                `${ev.finish_reason ?? "?"} · ${ev.chars} 字 · ${ev.ms}ms · ${ev.rounds} 轮`,
               );
               break;
             case "error":
@@ -95,6 +122,7 @@ export function useChatStream(): ChatStream {
     model,
     meta,
     error,
+    tools,
     busy: status === "streaming",
     send,
     stop,

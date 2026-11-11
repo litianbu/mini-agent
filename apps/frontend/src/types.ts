@@ -26,11 +26,27 @@ export interface ReasoningEvent {
   delta: string;
 }
 
+export interface ToolCallEvent {
+  type: "tool_call";
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface ToolResultEvent {
+  type: "tool_result";
+  id: string;
+  name: string;
+  ok: boolean;
+  output: string;
+}
+
 export interface DoneEvent {
   type: "done";
   finish_reason: string | null;
   ms: number;
   chars: number;
+  rounds: number;
 }
 
 export interface ErrorEvent {
@@ -42,5 +58,17 @@ export type AgentEvent =
   | StartEvent
   | TextEvent
   | ReasoningEvent
+  | ToolCallEvent
+  | ToolResultEvent
   | DoneEvent
   | ErrorEvent;
+
+/** 一次工具调用的完整记录：调用 + 结果拼在一起，方便渲染 */
+export interface ToolStep {
+  id: string;
+  name: string;
+  arguments: string;
+  done: boolean;
+  ok: boolean;
+  output: string;
+}
