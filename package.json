@@ -1,0 +1,18 @@
+{
+  "name": "mini-agent",
+  "version": "0.2.0",
+  "private": true,
+  "description": "单仓前后端分离的迷你编码 agent：Python 后端 + React 前端",
+  "scripts": {
+    "dev:backend": "cd apps/backend && uv run uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port 8787",
+    "dev:frontend": "pnpm --filter @mini-agent/frontend dev",
+    "build": "pnpm --filter @mini-agent/frontend build",
+    "typecheck": "pnpm --filter @mini-agent/frontend typecheck",
+    "test": "cd apps/backend && uv run pytest -q",
+    "cli": "cd apps/backend && uv run mini-agent"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.4"
+}

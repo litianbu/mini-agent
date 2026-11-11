@@ -1,0 +1,4 @@
+# 只有 frontend 是 Node 项目；backend 是 Python，pnpm 会忽略它
+# （因为没有 package.json）。
+packages:
+  - "apps/frontend"

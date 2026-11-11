@@ -1,0 +1,27 @@
+# ── Node / 前端 ───────────────────────────────
+node_modules/
+apps/frontend/dist/
+
+# ── Python / 后端 ─────────────────────────────
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# uv.lock 要提交（锁定依赖版本，应用项目必须可复现），
+# 所以这里**不要**忽略它。
+
+# ── 配置与本地数据 ────────────────────────────
+.env
+.env.local
+
+# S4 的会话持久化目录
+.mini-agent/
+
+# S3 之后让 agent 随便折腾的实验目录
+playground/
+
+# ── 杂项 ─────────────────────────────────────
+*.log
+.DS_Store

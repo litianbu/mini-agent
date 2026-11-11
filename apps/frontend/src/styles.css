@@ -1,0 +1,40 @@
+/* 样式基本都交给 antd 了（暗色主题在 main.tsx 的 ConfigProvider 里开）。
+   这里只留三条 antd 不管的事：整页高度、品牌标识、侧栏底部。 */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  /* antd 的 reset.css 已经把字号/行高统一过了，这里只补字体栈：
+     让中文优先用系统自带的那几个，比默认的 serif 好看得多。 */
+  font-family:
+    -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+
+/* 侧栏顶部的品牌区 */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 20px 14px;
+  color: #fff;
+}
+
+.brand-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1677ff;
+  box-shadow: 0 0 8px rgba(22, 119, 255, 0.7);
+}
+
+/* 侧栏底部说明，压在最下面 */
+.sider-foot {
+  position: absolute;
+  bottom: 16px;
+  left: 20px;
+}
