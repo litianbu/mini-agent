@@ -70,10 +70,11 @@ async def test_unknown_tool_and_bad_json_are_reported() -> None:
     assert "不是合法 JSON" in await execute("read_file", "{broken")
 
 
-def test_schemas_have_four_tools() -> None:
-    """四个工具都要注册进 schema，否则模型看不见。"""
+def test_schemas_include_core_tools() -> None:
+    """S3 的四个工具必须在 schema 里（S4 之后工具变多，用包含关系断言）。"""
     names = {s["function"]["name"] for s in schemas()}
-    assert names == {"read_file", "write_file", "glob", "bash"}
+    assert {"read_file", "write_file", "glob", "bash"} <= names
+
 
 
 def test_tool_events_serialize() -> None:
