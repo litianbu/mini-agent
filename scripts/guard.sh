@@ -27,8 +27,22 @@ while IFS= read -r -d '' f; do
     continue
   fi
 
-  # 正常文本：Python / TS / MD / JSON / CSS 都会被 file 认成 text 或 JSON
-  if file -b "$f" | grep -qE "text|JSON|empty"; then
+  # 判断依据：内容能不能按 UTF-8 解码、且不含 NUL 字节。
+  #
+  # 为什么不用 `file -b`：Symantec 的透明加解密对某些进程（python/cat/grep）
+  # 返回明文，对 `file` 和 `head` 返回密文块。用 file 判断会误报"文件损坏"，
+  # 而脚本一旦真的去 git checkout，就把**你未提交的改动**冲掉了 —— 这很危险。
+  # 直接读内容判断，跟编译器/解释器看到的一致。
+  if python3 - "$f" <<'PYCHK'
+import sys, pathlib
+try:
+    data = pathlib.Path(sys.argv[1]).read_bytes()
+except OSError:
+    sys.exit(1)
+# 空文件可能是正常的（比如空的 __init__.py），所以只看 NUL
+sys.exit(1 if b"\0" in data else 0)
+PYCHK
+  then
     continue
   fi
 

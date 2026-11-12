@@ -9,6 +9,7 @@
 | [step-01.md](step-01.md) | S1 · 流式输出：SSE 分帧、增量渲染 | ✅ |
 | [step-02.md](step-02.md) | S2 · 前后端分离：分层、契约、代理、Monorepo | ✅ |
 | [step-03.md](step-03.md) | S3 · 工具循环：让模型能读文件、跑命令 | ✅ |
+| [step-04.md](step-04.md) | S4 · grep 和 edit：按内容搜、精确改 | ✅ |
 
 > 看代码之前先翻 [`s1-code-map.md`](s1-code-map.md)。
 > 它把"从浏览器到模型再回来"的路径画成一张图，

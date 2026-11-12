@@ -53,7 +53,8 @@ pnpm dev:backend                    # 后端 → http://127.0.0.1:8787
 pnpm dev:frontend                    # 前端 → http://localhost:5180
 ```
 
-打开 <http://localhost:5180>，输入一句话，文字应该逐字出现。
+打开 <http://localhost:5180>，输入一句话 —— 不用等整段生成完，
+文字会一个个蹦出来。
 
 不想开浏览器？命令行也行：
 
