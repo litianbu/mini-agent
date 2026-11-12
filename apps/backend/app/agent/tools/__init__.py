@@ -11,10 +11,12 @@ import json
 from typing import Any
 
 from .base import Tool
+from .edit import EDIT
 from .fs import GLOB_SEARCH, READ_FILE, WRITE_FILE
+from .search import GREP
 from .shell import RUN_BASH
 
-ALL_TOOLS: list[Tool] = [READ_FILE, WRITE_FILE, GLOB_SEARCH, RUN_BASH]
+ALL_TOOLS: list[Tool] = [READ_FILE, WRITE_FILE, EDIT, GLOB_SEARCH, GREP, RUN_BASH]
 
 _BY_NAME: dict[str, Tool] = {tool.name: tool for tool in ALL_TOOLS}
 
