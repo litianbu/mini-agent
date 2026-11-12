@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -34,10 +35,16 @@ def test_six_tools_registered() -> None:
 
 
 async def test_grep_finds_content_with_line_numbers() -> None:
-    """结果要带 文件:行号，模型才能接着去读那一行。"""
+    """结果要带 文件:行号，模型才能接着去读那一行。
+
+    这里只断言"格式对"，不绑定具体文件路径 ——
+    模型拆到哪个文件是会变的（models 已经从 __init__.py 拆成 session.py 了），
+    断言路径会让重构一次就挂一次。
+    """
     out = await execute("grep", json.dumps({"pattern": "class ChatSession", "include": "*.py"}))
-    assert "models/__init__.py:" in out
-    assert "class ChatSession" in out
+    assert "apps/backend/app/models/" in out
+    # 形如 xxx.py:13: class ChatSession
+    assert re.search(r"\.py:\d+: class ChatSession", out)
 
 
 async def test_grep_returns_relative_paths() -> None:
