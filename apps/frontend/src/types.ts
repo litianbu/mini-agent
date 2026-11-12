@@ -72,3 +72,14 @@ export interface ToolStep {
   ok: boolean;
   output: string;
 }
+/** 界面上的一条消息（用户问的，或助手答的）。 */
+export interface Bubble {
+  id: string;
+  role: "user" | "assistant";
+  /** 正文。用户消息就是原问题；助手消息是流式拼起来的回答 */
+  text: string;
+  /** 助手的思考过程（用户消息永远为空） */
+  reasoning: string;
+  /** 助手在这条消息里调用过的工具 */
+  tools: ToolStep[];
+}

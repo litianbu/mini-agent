@@ -113,6 +113,7 @@ async def chat(
             round_text = ""
 
             async for delta in stream_deltas(convo):
+                print('delta', delta)
                 if delta.reasoning:
                     yield ReasoningEvent(delta=delta.reasoning)
 
@@ -153,13 +154,14 @@ async def chat(
 
             # ② 逐个执行，结果作为 role="tool" 的消息塞回去
             for call in calls:
+                # 开始调用工具
                 yield ToolCallEvent(
                     id=call["id"], name=call["name"], arguments=call["arguments"]
                 )
-
+                # 真正执行
                 output = await execute(call["name"], call["arguments"])
                 ok = not output.startswith(("错误：", "工具执行出错：", "拒绝执行："))
-
+                # 执行完毕
                 yield ToolResultEvent(
                     id=call["id"], name=call["name"], ok=ok, output=output
                 )
@@ -174,6 +176,7 @@ async def chat(
                     }
                 )
             # ③ 回到 while 顶部：带着工具结果再问模型一次
+            print('convo', convo)
 
         else:
             # while 正常跑满 MAX_ROUNDS 才会走到这里（没 break）

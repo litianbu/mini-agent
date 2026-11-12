@@ -33,6 +33,9 @@ export default defineConfig({
           react: ["react", "react-dom", "react-router-dom"],
           antd: ["antd"],
           query: ["@tanstack/react-query"],
+          // markdown 相关单独一块：平时很少变，
+          // 分开后改了业务代码也不会让这 100 多 KB 的缓存失效
+          markdown: ["react-markdown", "remark-gfm"],
         },
       },
     },

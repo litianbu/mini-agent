@@ -9,7 +9,7 @@
  * 这段解析和后端 apps/backend/mini_agent/agent/events.py 的 to_sse() 是一对：
  * 那边用 `data: {...}\n\n` 写，这边就用同样的规则读。
  */
-import type { AgentEvent, ToolStep } from "../types";
+import type { AgentEvent } from "../types";
 
 export async function* chatStream(
   question: string,
@@ -56,13 +56,3 @@ export async function* chatStream(
   }
 }
 /** 流式过程中页面的全部状态（hook 与页面共享这一个形状）。 */
-export interface ChatStreamState {
-  text: string;
-  reasoning: string;
-  status: "idle" | "streaming" | "done" | "error";
-  model: string;
-  meta: string;
-  error: string;
-  /** S3：这次对话期间发生的工具调用（按发生顺序） */
-  tools: ToolStep[];
-}

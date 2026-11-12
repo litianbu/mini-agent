@@ -1,31 +1,40 @@
 /**
  * 聊天流的自定义 hook。
  *
- * 把「发请求 → 收事件 → 更新状态」从页面里抽出来，好处有三：
- *   1. 页面只关心渲染，逻辑可单独测
- *   2. 停止/清理的时机集中在一处（不会忘记 abort）
- *   3. S3 加工具事件时，只改这个文件，页面几乎不动
+ * 把「发请求 → 收事件 → 更新状态」从页面里抽出来，页面只负责画。
  *
  * 为什么不用 React Query？见 api/client.ts 顶部那段话。
+ *
+ * 状态形状：一个 bubbles 数组，用户消息和助手消息混在一起按顺序排。
+ * 为什么不是「一个 text 字符串」——因为一次会话会有多轮问答，
+ * 只存一个字符串的话，上一轮的回答会被下一轮冲掉，用户看不到自己问过什么。
  */
 import { useCallback, useRef, useState } from "react";
-import { chatStream, type ChatStreamState } from "../api";
-import type { ToolStep } from "../types";
+import { chatStream } from "../api";
+import type { Bubble, ToolStep } from "../types";
 
-export interface ChatStream extends ChatStreamState {
+export type ChatStatus = "idle" | "streaming" | "done" | "error";
+
+export interface ChatStream {
+  bubbles: Bubble[];
+  status: ChatStatus;
+  model: string;
+  meta: string;
+  error: string;
   busy: boolean;
   send: (question: string) => void;
   stop: () => void;
 }
 
+let seq = 0;
+const nextId = () => `m${++seq}`;
+
 export function useChatStream(): ChatStream {
-  const [text, setText] = useState("");
-  const [reasoning, setReasoning] = useState("");
-  const [status, setStatus] = useState<ChatStreamState["status"]>("idle");
+  const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  const [status, setStatus] = useState<ChatStatus>("idle");
   const [model, setModel] = useState("—");
   const [meta, setMeta] = useState("");
   const [error, setError] = useState("");
-  const [tools, setTools] = useState<ToolStep[]>([]);
 
   const aborter = useRef<AbortController | null>(null);
 
@@ -40,17 +49,37 @@ export function useChatStream(): ChatStream {
     // 上一次还没结束就先中止，避免两个流同时往里写
     aborter.current?.abort();
 
-    setText("");
-    setReasoning("");
     setMeta("");
     setError("");
-    setTools([]);
     setStatus("streaming");
+
+    // 用户消息立刻上屏 —— 这才是"用户内容要展示"的关键。
+    // 助手的那条先占位（内容为空，页面会跳过不画），
+    // 这样后续 delta 有个固定的 target 可写。
+    const userBubble: Bubble = {
+      id: nextId(),
+      role: "user",
+      text: q,
+      reasoning: "",
+      tools: [],
+    };
+    const botBubble: Bubble = {
+      id: nextId(),
+      role: "assistant",
+      text: "",
+      reasoning: "",
+      tools: [],
+    };
+    setBubbles((list) => [...list, userBubble, botBubble]);
+
+    // 只更新助手那一条的某个字段。用 id 定位，
+    // 因为闭包里的 list 可能已经过时了。
+    const patchBot = (fn: (b: Bubble) => Bubble) =>
+      setBubbles((list) => list.map((b) => (b.id === botBubble.id ? fn(b) : b)));
 
     const ctrl = new AbortController();
     aborter.current = ctrl;
 
-    // 这里不 await：调用方拿不到 promise，也不用管生命周期
     void (async () => {
       try {
         for await (const ev of chatStream(q, ctrl.signal)) {
@@ -59,34 +88,38 @@ export function useChatStream(): ChatStream {
               setModel(ev.mock ? "MOCK（本地假数据）" : ev.model);
               break;
             case "text":
-              setText((t) => t + ev.delta);
+              patchBot((b) => ({ ...b, text: b.text + ev.delta }));
               break;
             case "reasoning":
-              setReasoning((r) => r + ev.delta);
+              patchBot((b) => ({ ...b, reasoning: b.reasoning + ev.delta }));
               break;
             case "tool_call":
               // 先是"它要做什么"。结果还没回来，先记成 done=false
-              setTools((list) => [
-                ...list,
-                {
-                  id: ev.id,
-                  name: ev.name,
-                  arguments: ev.arguments,
-                  done: false,
-                  ok: false,
-                  output: "",
-                },
-              ]);
+              patchBot((b) => ({
+                ...b,
+                tools: [
+                  ...b.tools,
+                  {
+                    id: ev.id,
+                    name: ev.name,
+                    arguments: ev.arguments,
+                    done: false,
+                    ok: false,
+                    output: "",
+                  },
+                ],
+              }));
               break;
             case "tool_result":
               // 结果回来，按 id 找到那条记录补上
-              setTools((list) =>
-                list.map((t) =>
+              patchBot((b) => ({
+                ...b,
+                tools: b.tools.map((t): ToolStep =>
                   t.id === ev.id
                     ? { ...t, done: true, ok: ev.ok, output: ev.output }
                     : t,
                 ),
-              );
+              }));
               break;
             case "done":
               setStatus("done");
@@ -116,13 +149,11 @@ export function useChatStream(): ChatStream {
   }, []);
 
   return {
-    text,
-    reasoning,
+    bubbles,
     status,
     model,
     meta,
     error,
-    tools,
     busy: status === "streaming",
     send,
     stop,
