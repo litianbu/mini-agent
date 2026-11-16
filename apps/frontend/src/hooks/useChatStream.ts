@@ -10,6 +10,7 @@
  * 只存一个字符串的话，上一轮的回答会被下一轮冲掉，用户看不到自己问过什么。
  */
 import { useCallback, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { chatStream } from "../api";
 import type { Bubble, ToolStep } from "../types";
 
@@ -17,6 +18,8 @@ export type ChatStatus = "idle" | "streaming" | "done" | "error";
 
 export interface ChatStream {
   bubbles: Bubble[];
+  /** 当前会话 id：新会话在收到 start 事件后才有值 */
+  sessionId: number | undefined;
   status: ChatStatus;
   model: string;
   meta: string;
@@ -29,14 +32,30 @@ export interface ChatStream {
 let seq = 0;
 const nextId = () => `m${++seq}`;
 
-export function useChatStream(): ChatStream {
-  const [bubbles, setBubbles] = useState<Bubble[]>([]);
+/**
+ * @param initialBubbles 历史会话回放时传进来；新会话传空数组
+ * @param sessionId      已有会话的 id；新会话传 undefined（由后端分配）
+ */
+export function useChatStream(
+  initialBubbles: Bubble[] = [],
+  sessionId?: number,
+): ChatStream {
+  const [bubbles, setBubbles] = useState<Bubble[]>(initialBubbles);
+  // 新会话时后端会在 start 事件里给 id，拿到后存这里
+  const [sid, setSid] = useState<number | undefined>(sessionId);
   const [status, setStatus] = useState<ChatStatus>("idle");
   const [model, setModel] = useState("—");
   const [meta, setMeta] = useState("");
   const [error, setError] = useState("");
 
+  // 侧栏的会话列表是 React Query 管的。这一轮对话结束后，
+  // 侧栏必须跟着变（新会话要出现在列表里、条数要 +1、顺序要往前排），
+  // 所以在这里主动让它失效重取 —— 这是"写操作影响读缓存"的标准做法。
+  const qc = useQueryClient();
+
   const aborter = useRef<AbortController | null>(null);
+  // ref 而不是 state：send 是 useCallback 缓存的，闭包里读到的是旧 state
+  const sidRef = useRef<number | undefined>(sessionId);
 
   const stop = useCallback(() => {
     aborter.current?.abort();
@@ -82,10 +101,17 @@ export function useChatStream(): ChatStream {
 
     void (async () => {
       try {
-        for await (const ev of chatStream(q, ctrl.signal)) {
+        // 注意用 sidRef：send 的闭包拿不到最新的 sid
+        for await (const ev of chatStream(q, sidRef.current, ctrl.signal)) {
           switch (ev.type) {
             case "start":
               setModel(ev.mock ? "MOCK（本地假数据）" : ev.model);
+              if (ev.session_id != null) {
+                setSid(ev.session_id);
+                sidRef.current = ev.session_id;
+              }
+              // 会话在流开始前就已经建好了，此时刷新列表能让侧栏立刻出现它
+              void qc.invalidateQueries({ queryKey: ["sessions"] });
               break;
             case "text":
               patchBot((b) => ({ ...b, text: b.text + ev.delta }));
@@ -123,6 +149,8 @@ export function useChatStream(): ChatStream {
               break;
             case "done":
               setStatus("done");
+              // 回答存库后消息数变了，列表要重取才能显示新的条数/顺序
+              void qc.invalidateQueries({ queryKey: ["sessions"] });
               setMeta(
                 `${ev.finish_reason ?? "?"} · ${ev.chars} 字 · ${ev.ms}ms · ${ev.rounds} 轮`,
               );
@@ -150,6 +178,7 @@ export function useChatStream(): ChatStream {
 
   return {
     bubbles,
+    sessionId: sid,
     status,
     model,
     meta,
