@@ -191,8 +191,8 @@ curl localhost:8787/api/health                                 # 看 db 字段
 | S2 | 前后端分离 | 分层、契约、代理、Monorepo | 半天 | ✅ |
 | S3 | 工具循环 | `tool_calls` 累积、`tool_call_id` 配对、循环刹车 | 半天 | ✅ 完成 |
 | S4 | 工具集扩充 | edit 精确替换、grep 内容搜索、路径越界防护 | 1 天 | ✅ 完成 |
-| S5 | 会话持久化 | 存进 MySQL、恢复会话、会话列表 | 半天 | 下一步 |
-| S6 | 上下文管理 | 裁剪 vs 摘要、token 估算 | 半天 | |
+| S5 | 会话持久化 | 存进 MySQL、恢复会话、会话列表 | 半天 | ✅ 完成 |
+| S6 | 上下文管理 | 裁剪 vs 摘要、token 估算 | 半天 | 下一步 |
 | S7 | HTTP 加固 | 超时、限流、错误码、取消传播 | 半天 | |
 | S8 | 界面打磨 | 工具调用可视化、Markdown 渲染 | 1 天 | |
 | S9 | 子 agent + 多模型 | 任务委派、模型路由 | 1 天 | |
@@ -229,19 +229,24 @@ curl localhost:8787/api/health                                 # 看 db 字段
 
 ## 八、现在在哪
 
-S1～S4 已完成并验证：
+S1～S5 已完成并验证：
 
 - 前端 <http://localhost:5180>
 - 后端 <http://127.0.0.1:8787>，API 文档在 `/docs`
 - 数据库 `mini_agent`（建表：`uv run python -m app.core.database`）
 - 6 个工具：`glob` / `grep` / `read_file` / `edit` / `write_file` / `bash`
 
-**现在它是个能干活儿的 agent 了**：会按内容搜代码、精准改几行、
-跑测试验证自己改得对不对。`app/agent/loop.py` 那个 while 就是 ReAct 的全部。
+**它现在是个能记住事的 agent**：对话存进 MySQL，侧栏列出历史会话，
+点进去能接着聊，模型记得之前说过什么。
 
-界面也像样了：消息分左右气泡、助手回答走 Markdown（表格/代码块都正常）、
-工具调用可折叠成一行 `工具调用 2 个 · 全部成功`。
+```
+POST /api/chat              流式对话（顺带存库）
+GET  /api/sessions          会话列表（含消息数）
+GET  /api/sessions/{id}     会话详情
+DELETE /api/sessions/{id}   删除（消息级联删）
+```
 
-**下一步是 S5 会话持久化** —— 现在刷新页面，对话就没了。
-`models/` 里那两张表（`sessions` / `messages`）已经建好，但还没人往里写。
-S5 要做的是：每轮对话存库、侧栏列出历史会话、点进去能接着聊。
+**下一步是 S6 上下文管理** —— 现在每次请求都把**全部**历史发给模型。
+聊到 50 轮以后，token 会爆、响应会慢、费用会涨。
+S6 要做的是：超长时怎么裁（丢最早的？摘要前面？），以及怎么估算 token。
+顺便把 S5 留的尾巴补上：工具调用过程也落库。
