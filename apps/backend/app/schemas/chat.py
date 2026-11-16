@@ -16,3 +16,6 @@ class ChatRequest(BaseModel):
     # 限制长度不是为了防黑客，是让 400 在调用模型之前就发生 ——
     # 别把超长文本先发给模型，再发现不对劲。
     question: str = Field(min_length=1, max_length=8000)
+
+    # 不传就是新会话，后端会建一个并把 id 通过 start 事件发回来
+    session_id: int | None = None

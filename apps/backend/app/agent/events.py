@@ -19,11 +19,16 @@ from pydantic import BaseModel, Field
 
 
 class StartEvent(BaseModel):
-    """流开始。带上模型名，前端能显示"现在是谁在回答"。"""
+    """流开始。带上模型名，前端能显示"现在是谁在回答"。
+
+    session_id 是 S5 加的：新建会话时由后端分配，前端拿到就能
+    把地址栏换成 /sessions/123，刷新后还能回到同一段对话。
+    """
 
     type: Literal["start"] = "start"
     model: str
     mock: bool
+    session_id: int | None = None
 
 
 class TextEvent(BaseModel):

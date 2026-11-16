@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from . import __version__
-from .api.routes import chat, health
+from .api.routes import chat, health, sessions
 from .core import database
 from .core.config import REPO_ROOT, settings
 
@@ -63,6 +63,7 @@ def create_app() -> FastAPI:
     # ── 接口 ────────────────────────────────────────────
     # 统一 /api 前缀：以后加 v2 或者换网关，路径规则好迁移。
     app.include_router(chat.router, prefix="/api", tags=["chat"])
+    app.include_router(sessions.router, prefix="/api", tags=["sessions"])
     app.include_router(health.router, prefix="/api", tags=["health"])
 
     # ── 前端产物（生产模式）──────────────────────────────
