@@ -17,6 +17,8 @@ export default function App() {
         {/* index = 路径为 "/" 时渲染，也就是默认打开新会话 */}
         <Route index element={<NewSessionPage />} />
         <Route path="sessions" element={<SessionsPage />} />
+        {/* 历史会话复用同一个聊天组件：有 id 就加载历史，没有就是新会话 */}
+        <Route path="sessions/:id" element={<NewSessionPage />} />
 
         {/* 兜底：地址打错时不至于白屏 */}
         <Route

@@ -14,6 +14,8 @@ export interface StartEvent {
   type: "start";
   model: string;
   mock: boolean;
+  /** 后端分配的会话 id（新会话时才有值），前端据此切地址栏 */
+  session_id?: number | null;
 }
 
 export interface TextEvent {
@@ -82,4 +84,33 @@ export interface Bubble {
   reasoning: string;
   /** 助手在这条消息里调用过的工具 */
   tools: ToolStep[];
+}
+
+// ── 会话（S5）─────────────────────────────────────────
+// 这几个是"普通 HTTP 接口"的形状，和上面流式事件不是一回事：
+// 事件是一次请求里陆续到的，这些是查一次拿一份快照。
+
+/** 侧栏里的一个会话。 */
+export interface SessionSummary {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+/** 一条存在库里的消息（回放历史会话用）。 */
+export interface StoredMessage {
+  id: number;
+  role: string;
+  content: string;
+  reasoning: string | null;
+  created_at: string;
+}
+
+/** 打开某个会话时的完整内容。 */
+export interface SessionDetail {
+  id: number;
+  title: string;
+  messages: StoredMessage[];
 }

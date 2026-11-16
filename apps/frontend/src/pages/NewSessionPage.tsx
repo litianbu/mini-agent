@@ -1,26 +1,41 @@
 /**
- * 新会话页面。
+ * 聊天页面。两种进法用同一个组件：
+ *   /              → 新会话（sessionId 为空，后端分配）
+ *   /sessions/:id  → 打开历史会话（先读库，再接着聊）
  *
- * 这个文件只做两件事：
- *   1. 把 bubbles 数组画出来（用户消息在右，助手在左）
- *   2. 把用户输入交给 hook
+ * ── 这里踩过一个坑，值得记住 ──
+ * 原来所有状态都在这一个组件里：先进 useSession() 拿数据，
+ * 再把数据算成 initialBubbles 传给 useChatStream()。
+ * 结果是"从历史会话进去偶尔是空白的"。
  *
- * 想改界面来这里，想改行为去 hooks/useChatStream.ts。
+ * 原因：useState(initialBubbles) 只在**第一次渲染**时看这个值。
+ * 首次进入时请求还没回来，initialBubbles 是空数组；
+ * 数据到了、组件重渲染，但 useState 的初始值早就用掉了，不会更新。
+ * 之所以"偶尔"正常 —— React Query 有缓存，第二次进同一个会话时
+ * 首次渲染就有数据了。
+ *
+ * 正确做法不是"用 useEffect 把新数据塞进 state"（那样要处理
+ * 流式数据和历史数据的覆盖顺序），而是：**让这个组件晚点出生**。
+ * 等数据到了再挂载它，初始值自然就是对的。下面的 key 干的就是这件事。
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   Alert,
   Button,
   Flex,
   Input,
   Space,
+  Spin,
   Tag,
   Timeline,
   Typography,
 } from "antd";
 import { Markdown } from "../components/Markdown";
+import { useSession } from "../api/client";
+import { useActiveSession } from "../context/activeSession";
 import { useChatStream } from "../hooks/useChatStream";
-import type { Bubble } from "../types";
+import type { Bubble, StoredMessage } from "../types";
 
 const STATUS_TAG = {
   idle: { color: "default", text: "空闲" },
@@ -34,6 +49,20 @@ function toolSummary(tools: Bubble["tools"]): string {
   if (tools.some((t) => !t.done)) return "· 执行中…";
   const failed = tools.filter((t) => !t.ok).length;
   return failed === 0 ? "· 全部成功" : `· ${failed} 个失败`;
+}
+
+/** 库里的消息 → 界面气泡。纯函数，方便单独测。 */
+export function toBubbles(messages: StoredMessage[] | undefined): Bubble[] {
+  return (messages ?? [])
+    // 工具结果（role=tool）没有正文，界面上也没有对应气泡，跳过
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      id: `db-${m.id}`,
+      role: m.role as "user" | "assistant",
+      text: m.content,
+      reasoning: m.reasoning ?? "",
+      tools: [],
+    }));
 }
 
 /** 一条消息。用户的和助手的长得不一样，这是"谁在说话"最直观的提示。 */
@@ -109,10 +138,47 @@ function Message({ bubble }: { bubble: Bubble }) {
   );
 }
 
-export default function NewSessionPage() {
+/**
+ * 真正的聊天界面。
+ *
+ * 只在"该显示什么"已经确定之后才挂载 ——
+ * 历史会话要等数据回来，新会话立刻就能挂载（初始气泡为空）。
+ */
+function ChatView({
+  initialBubbles,
+  sessionId,
+  title,
+}: {
+  initialBubbles: Bubble[];
+  sessionId?: number;
+  title?: string;
+}) {
   const [input, setInput] = useState("");
-  const chat = useChatStream();
   const bottom = useRef<HTMLDivElement>(null);
+  const chat = useChatStream(initialBubbles, sessionId);
+
+  // 告诉侧栏"我现在显示的是几号会话"，它据此高亮。
+  //
+  // 用 useLayoutEffect 而不是 useEffect：这个值要在浏览器绘制之前写好，
+  // 否则会有一帧的高亮错位（侧栏先按旧路径画一次，再跳到新值）。
+  const { setActiveSessionId } = useActiveSession();
+  const shownId = sessionId ?? chat.sessionId ?? null;
+  useLayoutEffect(() => {
+    setActiveSessionId(shownId);
+  }, [shownId, setActiveSessionId]);
+
+  // 新会话第一次发消息后，后端会分配 id。
+  // 把它写进地址栏 —— 这样刷新还能回到这段对话。
+  //
+  // 为什么用 history.replaceState 而不是 react-router 的 navigate：
+  //   navigate 会让路由真正切换，而 "/" 和 "/sessions/:id" 是两个路由，
+  //   组件会被卸载重挂 → 正在进行的流断了，已经收到的文字也丢了。
+  //   replaceState 只改地址栏，不通知路由，组件不受影响。
+  useEffect(() => {
+    if (sessionId == null && chat.sessionId != null) {
+      window.history.replaceState(null, "", `/sessions/${chat.sessionId}`);
+    }
+  }, [chat.sessionId, sessionId]);
 
   // 新内容出现时自动滚到底部，否则流式输出时用户得手动拖
   useEffect(() => {
@@ -128,8 +194,8 @@ export default function NewSessionPage() {
     <Flex vertical style={{ height: "100%", width: "100%" }}>
       {/* 顶栏 */}
       <Flex align="center" gap={12} className="chat-head">
-        <Typography.Title level={5} style={{ margin: 0 }}>
-          新会话
+        <Typography.Title level={5} style={{ margin: 0 }} ellipsis>
+          {title || "新会话"}
         </Typography.Title>
         <Tag>{chat.model}</Tag>
         <Tag color={STATUS_TAG[chat.status].color} style={{ marginInlineStart: "auto" }}>
@@ -191,5 +257,48 @@ export default function NewSessionPage() {
         </div>
       </div>
     </Flex>
+  );
+}
+
+export default function NewSessionPage() {
+  // 路由是 /sessions/:id 时 id 有值，/ 时为空
+  const { id } = useParams();
+  const sessionId = id ? Number(id) : undefined;
+
+  const { data: detail, isLoading, error } = useSession(sessionId);
+
+  // 历史会话：数据没到之前先别挂载聊天组件（原因见文件顶部那段）
+  if (sessionId !== undefined && isLoading) {
+    return (
+      <Flex align="center" justify="center" style={{ height: "100%" }}>
+        <Spin tip="正在读取会话…">
+          <div style={{ width: 120, height: 40 }} />
+        </Spin>
+      </Flex>
+    );
+  }
+
+  if (sessionId !== undefined && error) {
+    return (
+      <Flex align="center" justify="center" style={{ height: "100%", padding: 24 }}>
+        <Alert
+          type="error"
+          showIcon
+          message="这个会话读不出来"
+          description={`${String(error)}。可能是已被删除。`}
+        />
+      </Flex>
+    );
+  }
+
+  // key 是关键：换了会话（或从"新会话"第一次拿到 id）就换一个实例，
+  // 让 useChatStream 的初始值重新生效。
+  return (
+    <ChatView
+      key={sessionId ?? "new"}
+      initialBubbles={toBubbles(detail?.messages)}
+      sessionId={sessionId}
+      title={detail?.title}
+    />
   );
 }

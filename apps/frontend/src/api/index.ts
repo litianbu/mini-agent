@@ -13,12 +13,14 @@ import type { AgentEvent } from "../types";
 
 export async function* chatStream(
   question: string,
+  sessionId: number | undefined,
   signal: AbortSignal,
 ): AsyncGenerator<AgentEvent> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    // sessionId 为空 = 新会话，后端会建一个并通过 start 事件发回 id
+    body: JSON.stringify({ question, session_id: sessionId ?? null }),
     signal,
   });
 

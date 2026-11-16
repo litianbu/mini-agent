@@ -249,3 +249,68 @@ body {
 
 /* 图片不要超出气泡 */
 .md img { max-width: 100%; border-radius: 6px; }
+
+/* ── 历史会话列表 ─────────────────────────────────────── */
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.session-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* min-width: 0 是关键：不加的话长标题不会省略号，
+   而是把右侧的"12 条"和删除按钮挤出容器 */
+.session-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-title {
+  font-size: 14px;
+  color: #fff;
+  /* 标题太长就省略，保持每行等高 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.session-count {
+  margin-inline-end: 0;
+  flex-shrink: 0;
+}
+
+/* 侧栏里的会话标题：太长就省略号，不能换行把菜单撑高。
+   父级 .ant-menu-title-content 是 flex，所以这里要给它 min-width: 0。 */
+.nav-session {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+.ant-menu-title-content {
+  min-width: 0;
+}
