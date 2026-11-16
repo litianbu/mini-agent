@@ -1,8 +1,20 @@
-import { defineConfig } from "vite";
+// 从 vitest/config 导入而不是 vite：这样 defineConfig 才认识 test 字段
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+
+  // 前端测试（vitest）。为什么需要它：
+  //   渲染测试（react-dom/server）只能验证"给定 props 画出什么"，
+  //   而"数据晚一步到、组件状态没更新"这类 bug 只有真跑起来才看得见。
+  //   S5 的空白会话就是这么漏掉的。
+  test: {
+    // happy-dom 比 jsdom 轻，也不会踩 Node 22 的 ESM/CJS 兼容问题
+    environment: "happy-dom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+  },
 
   server: {
     // 不用 Vite 默认的 5173：这台机器上还有别的项目占着它。

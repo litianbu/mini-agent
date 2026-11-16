@@ -8,7 +8,7 @@
     "dev:frontend": "pnpm --filter @mini-agent/frontend dev",
     "build": "pnpm --filter @mini-agent/frontend build",
     "typecheck": "pnpm --filter @mini-agent/frontend typecheck",
-    "test": "cd apps/backend && uv run pytest -q",
+    "test": "pnpm --filter @mini-agent/frontend test && (cd apps/backend && uv run pytest -q)",
     "cli": "cd apps/backend && uv run mini-agent"
   },
   "engines": {
