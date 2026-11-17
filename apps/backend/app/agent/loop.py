@@ -116,94 +116,107 @@ async def chat(
     )
 
     try:
-        while rounds < MAX_ROUNDS:
-            rounds += 1
-            acc = _Accumulator()
-            round_text = ""
+        # 总时长兜底。httpx 的 read 超时只管"两帧之间"，
+        # 管不了"这个请求已经跑了 20 分钟" —— 两者是叠加关系，不是替代。
+        #
+        # asyncio.timeout 会在超时那一刻取消内部的 await，
+        # 所以卡在模型流或工具执行里都能被切断。
+        async with asyncio.timeout(settings.agent_timeout):
+            while rounds < MAX_ROUNDS:
+                rounds += 1
+                acc = _Accumulator()
+                round_text = ""
 
-            # 每轮都裁，不是只在入口裁一次 ——
-            # 工具输出会在一轮内不断累积，入口裁过之后还会涨回去。
-            convo, dropped = trim_to_budget(convo, settings.context_budget)
-            print('剩余的', convo, '裁掉的', dropped)
-            if dropped:
-                trimmed_total += dropped
-                # 裁剪会改缓存前缀，日志里留个痕迹，排查"为什么它忘了"时有用
-                print(f"[context] 超出预算，裁掉 {dropped} 条")
+                # 每轮都裁，不是只在入口裁一次 ——
+                # 工具输出会在一轮内不断累积，入口裁过之后还会涨回去。
+                convo, dropped = trim_to_budget(convo, settings.context_budget)
+                print('剩余的', convo, '裁掉的', dropped)
+                if dropped:
+                    trimmed_total += dropped
+                    # 裁剪会改缓存前缀，日志里留个痕迹，排查"为什么它忘了"时有用
+                    print(f"[context] 超出预算，裁掉 {dropped} 条")
 
-            async for delta in stream_deltas(convo):
-                if delta.reasoning:
-                    yield ReasoningEvent(delta=delta.reasoning)
+                async for delta in stream_deltas(convo):
+                    if delta.reasoning:
+                        yield ReasoningEvent(delta=delta.reasoning)
 
-                if delta.text:
-                    round_text += delta.text
-                    total_chars += len(delta.text)
-                    yield TextEvent(delta=delta.text)
+                    if delta.text:
+                        round_text += delta.text
+                        total_chars += len(delta.text)
+                        yield TextEvent(delta=delta.text)
 
-                if delta.tool_calls:
-                    acc.feed(delta.tool_calls)
+                    if delta.tool_calls:
+                        acc.feed(delta.tool_calls)
 
-                if delta.usage:
-                    usage_total = usage_total + delta.usage
+                    if delta.usage:
+                        usage_total = usage_total + delta.usage
 
-                if delta.finish_reason:
-                    finish_reason = delta.finish_reason
+                    if delta.finish_reason:
+                        finish_reason = delta.finish_reason
 
-            # ── 没有工具调用 → 这次回答就结束了 ──────────────
-            if not acc:
-                break
+                # ── 没有工具调用 → 这次回答就结束了 ──────────────
+                if not acc:
+                    break
 
-            calls = acc.result()
+                calls = acc.result()
 
-            # ① 先把"模型想做什么"记进对话历史。
-            #    tool_calls 必须原样保留：下一轮请求里，
-            #    模型要靠 tool_call_id 找到自己刚才的意图。
-            convo.append(
-                {
-                    "role": "assistant",
-                    "content": round_text,
-                    "tool_calls": [
-                        {
-                            "id": c["id"],
-                            "type": "function",
-                            "function": {"name": c["name"], "arguments": c["arguments"]},
-                        }
-                        for c in calls
-                    ],
-                }
-            )
-
-            # ② 逐个执行，结果作为 role="tool" 的消息塞回去
-            for call in calls:
-                # 开始调用工具
-                yield ToolCallEvent(
-                    id=call["id"], name=call["name"], arguments=call["arguments"]
-                )
-                # 真正执行
-                output = await execute(call["name"], call["arguments"])
-                ok = not output.startswith(("错误：", "工具执行出错：", "拒绝执行："))
-                # 执行完毕
-                yield ToolResultEvent(
-                    id=call["id"], name=call["name"], ok=ok, output=output
-                )
-
+                # ① 先把"模型想做什么"记进对话历史。
+                #    tool_calls 必须原样保留：下一轮请求里，
+                #    模型要靠 tool_call_id 找到自己刚才的意图。
                 convo.append(
                     {
-                        "role": "tool",
-                        # 这个 id 就是配对的关键：模型据此知道
-                        # 这份结果属于哪一次调用
-                        "tool_call_id": call["id"],
-                        "content": output,
+                        "role": "assistant",
+                        "content": round_text,
+                        "tool_calls": [
+                            {
+                                "id": c["id"],
+                                "type": "function",
+                                "function": {"name": c["name"], "arguments": c["arguments"]},
+                            }
+                            for c in calls
+                        ],
                     }
                 )
-            # ③ 回到 while 顶部：带着工具结果再问模型一次
 
-        else:
-            # while 正常跑满 MAX_ROUNDS 才会走到这里（没 break）
-            yield ErrorEvent(
-                message=f"已连续调用工具 {MAX_ROUNDS} 轮仍未结束，强制停止。"
-                "可能是任务太大，或是模型在原地打转。"
-            )
+                # ② 逐个执行，结果作为 role="tool" 的消息塞回去
+                for call in calls:
+                    # 开始调用工具
+                    yield ToolCallEvent(
+                        id=call["id"], name=call["name"], arguments=call["arguments"]
+                    )
+                    # 真正执行
+                    output = await execute(call["name"], call["arguments"])
+                    ok = not output.startswith(("错误：", "工具执行出错：", "拒绝执行："))
+                    # 执行完毕
+                    yield ToolResultEvent(
+                        id=call["id"], name=call["name"], ok=ok, output=output
+                    )
 
+                    convo.append(
+                        {
+                            "role": "tool",
+                            # 这个 id 就是配对的关键：模型据此知道
+                            # 这份结果属于哪一次调用
+                            "tool_call_id": call["id"],
+                            "content": output,
+                        }
+                    )
+                # ③ 回到 while 顶部：带着工具结果再问模型一次
+
+            else:
+                # while 正常跑满 MAX_ROUNDS 才会走到这里（没 break）
+                yield ErrorEvent(
+                    message=f"已连续调用工具 {MAX_ROUNDS} 轮仍未结束，强制停止。"
+                    "可能是任务太大，或是模型在原地打转。"
+                )
+
+    except TimeoutError:
+        # asyncio.timeout 超时抛的就是内建 TimeoutError（3.11+）
+        yield ErrorEvent(
+            message=f"这次处理超过了 {settings.agent_timeout:.0f} 秒上限，已停止。"
+            "可以试着把任务拆小，或在 .env 里调大 AGENT_TIMEOUT。"
+        )
+        return
     except asyncio.CancelledError:
         # 用户关了页面 / 点了停止。必须重新抛出，
         # 否则取消信号被吞掉，上层会以为任务正常结束了。

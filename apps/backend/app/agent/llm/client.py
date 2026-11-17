@@ -61,8 +61,16 @@ async def real_deltas(messages: list[dict]) -> AsyncIterator[Delta]:
         "Authorization": f"Bearer {settings.api_key}",
         "Content-Type": "application/json",
     }
-    # read=None 表示"生成多久都等"；connect 必须有超时，否则连不上会卡死
-    timeout = httpx.Timeout(connect=15.0, read=None, write=30.0, pool=15.0)
+    # read 的含义是"两帧之间的最大间隔"，不是"整个请求最多多久"。
+    # 原来写成 None（无限等）看起来宽容，实际是危险的：
+    # 网关半死不活时（TCP 连着、偶尔发心跳、就是不输出正文），请求会永远挂着。
+    # 也不能设成 5 秒 —— 模型思考十几秒才开始输出，正常请求会被误杀。
+    timeout = httpx.Timeout(
+        connect=15.0,
+        read=settings.llm_read_timeout,
+        write=30.0,
+        pool=15.0,
+    )
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream("POST", url, json=payload, headers=headers) as resp:
