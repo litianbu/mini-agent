@@ -89,6 +89,9 @@ class DoneEvent(BaseModel):
     completion_tokens: int = 0
     total_tokens: int = 0
 
+    # 这次为了塞进预算，裁掉了多少条历史消息（0 表示没裁）
+    trimmed: int = 0
+
 
 class ErrorEvent(BaseModel):
     """出错。注意：出错也是一个**事件**，不是抛异常。

@@ -33,6 +33,7 @@ from .events import (
     ToolResultEvent,
 )
 from .delta import Usage
+from .context import trim_to_budget
 from .llm.client import explain, stream_deltas
 from .prompt import system_prompt
 from .tools import execute
@@ -97,6 +98,9 @@ async def chat(
     # 所以要累加，否则只能看到最后一轮的数字。
     usage_total = Usage()
 
+    # 被裁掉多少条，用于观测（只在开发环境显示给开发者看）
+    trimmed_total = 0
+
     # 复制一份：后面会往里追加 assistant / tool 消息。
     # 如果直接改调用方传进来的 list，多轮对话的历史会被污染。
     convo: list[Message] = list(messages)
@@ -116,6 +120,15 @@ async def chat(
             rounds += 1
             acc = _Accumulator()
             round_text = ""
+
+            # 每轮都裁，不是只在入口裁一次 ——
+            # 工具输出会在一轮内不断累积，入口裁过之后还会涨回去。
+            convo, dropped = trim_to_budget(convo, settings.context_budget)
+            print('剩余的', convo, '裁掉的', dropped)
+            if dropped:
+                trimmed_total += dropped
+                # 裁剪会改缓存前缀，日志里留个痕迹，排查"为什么它忘了"时有用
+                print(f"[context] 超出预算，裁掉 {dropped} 条")
 
             async for delta in stream_deltas(convo):
                 if delta.reasoning:
@@ -200,6 +213,7 @@ async def chat(
         return
 
     yield DoneEvent(
+        trimmed=trimmed_total,
         prompt_tokens=usage_total.prompt_tokens,
         completion_tokens=usage_total.completion_tokens,
         total_tokens=usage_total.total_tokens,

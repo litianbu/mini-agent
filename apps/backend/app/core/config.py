@@ -42,6 +42,16 @@ class Settings(BaseSettings):
     mock: bool = False
     port: int = 8787
 
+    # ── 上下文预算 ─────────────────────────────────────
+    # 一次请求最多带多少 token 的历史。超了就从最老的开始丢。
+    #
+    # 为什么是 16000 而不是"窗口大小乘个比例"？
+    #   1. 网关没告诉我们窗口多大（/models 不返回 context_length）
+    #   2. 实测一次普通问答约 1400 token 入、带工具约 3100
+    #   3. 16k 大约能装 5-10 轮带工具的对话，够用，且便宜
+    # 真调大也能改：.env 里设 CONTEXT_BUDGET=32000 即可，不用动代码。
+    context_budget: int = 16000
+
     # 三个都认，谁先有值用谁 —— 这样换服务商不用改代码
     deepseek_api_key: str = ""
     llm_api_key: str = ""
