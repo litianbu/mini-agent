@@ -52,6 +52,8 @@ export interface DoneEvent {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  /** 为塞进上下文预算，裁掉了多少条历史（0=没裁） */
+  trimmed: number;
   rounds: number;
 }
 

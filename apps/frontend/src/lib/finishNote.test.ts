@@ -19,6 +19,7 @@ function done(over: Partial<DoneEvent> = {}): DoneEvent {
     prompt_tokens: 1342,
     completion_tokens: 75,
     total_tokens: 1417,
+    trimmed: 0,
     ...over,
   };
 }
@@ -48,6 +49,11 @@ describe("给开发看的调试信息", () => {
     expect(d).toContain("1.2s");
     expect(d).toContain("1417 token");
     expect(d).toContain("入 1342");
+  });
+
+  it("裁剪发生过要显示出来（不然'为什么它忘了'很难查）", () => {
+    expect(debugNote(done({ trimmed: 12 }))).toContain("裁掉 12 条");
+    expect(debugNote(done({ trimmed: 0 }))).not.toContain("裁掉");
   });
 
   it("token 为 0（mock 模式）时不显示，免得误导", () => {

@@ -57,6 +57,11 @@ export function debugNote(ev: DoneEvent): string {
   if (ev.total_tokens > 0) {
     parts.push(`${ev.total_tokens} token（入 ${ev.prompt_tokens} / 出 ${ev.completion_tokens}）`);
   }
+  // 裁剪悄悄发生会变成"明明说过的事它怎么忘了"这种玄学问题，
+  // 所以在开发环境一定要能看到
+  if (ev.trimmed > 0) {
+    parts.push(`裁掉 ${ev.trimmed} 条历史`);
+  }
   return parts.join(" · ");
 }
 
