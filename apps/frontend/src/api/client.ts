@@ -13,6 +13,7 @@
  * 那时这里的代码会真正派上用场。
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { errorMessage } from "./errors";
 import type { SessionDetail, SessionSummary } from "../types";
 
 export interface Health {
@@ -24,7 +25,7 @@ export interface Health {
 
 async function fetchHealth(): Promise<Health> {
   const res = await fetch("/api/health");
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
 
@@ -44,13 +45,13 @@ export function useHealth() {
 
 async function fetchSessions(): Promise<SessionSummary[]> {
   const res = await fetch("/api/sessions");
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
 
 async function fetchSession(id: number): Promise<SessionDetail> {
   const res = await fetch(`/api/sessions/${id}`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
 
@@ -79,11 +80,17 @@ export function useDeleteSession() {
   return useMutation({
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(await readError(res));
     },
     onSuccess: () => {
       // 不手动改缓存，直接标脏让它重取 —— 少一份"我猜服务器现在是什么样"的逻辑
       void qc.invalidateQueries({ queryKey: ["sessions"] });
     },
   });
+}
+
+/** 读响应体并翻译成一句人话。响应体读失败也不能让错误处理本身再崩一次。 */
+async function readError(res: Response): Promise<string> {
+  const body = await res.text().catch(() => "");
+  return errorMessage(res.status, body);
 }

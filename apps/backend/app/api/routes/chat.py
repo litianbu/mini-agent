@@ -27,6 +27,7 @@ from ...agent.events import (
 )
 from ...agent.loop import chat
 from ...schemas.chat import ChatRequest
+from ...core.limiter import session_limiter
 from ...services import session_service
 from ..deps import get_db
 
@@ -49,14 +50,39 @@ async def post_chat(
 
     session_id = session.id
 
-    # ② 历史消息 + 这次提问，一起交给 agent
-    history = await session_service.messages_for_llm(db, session_id)
-    convo = [*history, {"role": "user", "content": body.question}]
-    print('convo 测试起来', convo)
-    # 用户消息先落库（此时还不知道回答是什么）
-    await session_service.add_message(db, session_id, "user", body.question)
+    # ② 抢占这个会话。上一条还在生成就拒绝，回 429。
+    #
+    # 位置很关键：必须在"写用户消息"之前。
+    # 否则被拒绝的请求也会把提问存进库，留下一条永远没有回答的孤消息。
+    if not session_limiter.acquire(session_id):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="这个会话的上一条回答还在生成，请稍候再发",
+        )
+
+    try:
+        # 历史消息 + 这次提问，一起交给 agent
+        history = await session_service.messages_for_llm(db, session_id)
+        convo = [*history, {"role": "user", "content": body.question}]
+        print('convo 测试起来', convo)
+        # 用户消息先落库（此时还不知道回答是什么）
+        await session_service.add_message(db, session_id, "user", body.question)
+    except Exception:
+        # 抢到锁之后、生成器启动之前出错，得在这里放掉，
+        # 否则这个会话就永远卡在"有人在跑"的状态
+        session_limiter.release(session_id)
+        raise
 
     async def event_stream() -> AsyncIterator[str]:
+        try:
+            async for chunk in _stream():
+                yield chunk
+        finally:
+            # 不管是正常结束、出错、还是用户断开，都要放锁。
+            # 这是唯一可靠的释放点 —— 生成器被关闭时也会执行。
+            session_limiter.release(session_id)
+
+    async def _stream() -> AsyncIterator[str]:
         # 一轮对话 = 可能多轮"模型 → 工具 → 模型"。
         # 边流边攒，等到该落库的时机再写。
         text_parts: list[str] = []

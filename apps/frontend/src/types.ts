@@ -124,3 +124,11 @@ export interface SessionDetail {
   title: string;
   messages: StoredMessage[];
 }
+
+/** FastAPI 校验失败的 detail 数组里的一项 */
+export interface ErrorDetail {
+  type: string;
+  loc: (string | number)[];
+  msg: string;
+  input?: unknown;
+}

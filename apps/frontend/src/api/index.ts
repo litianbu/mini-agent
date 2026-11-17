@@ -9,6 +9,7 @@
  * 这段解析和后端 apps/backend/mini_agent/agent/events.py 的 to_sse() 是一对：
  * 那边用 `data: {...}\n\n` 写，这边就用同样的规则读。
  */
+import { errorMessage } from "./errors";
 import type { AgentEvent } from "../types";
 
 export async function* chatStream(
@@ -25,8 +26,8 @@ export async function* chatStream(
   });
 
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${detail.slice(0, 200)}`);
+    const body = await res.text().catch(() => "");
+    throw new Error(errorMessage(res.status, body));
   }
   if (!res.body) throw new Error("响应没有 body，无法读取流");
 
