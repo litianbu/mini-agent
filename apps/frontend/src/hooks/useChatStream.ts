@@ -13,6 +13,7 @@ import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { chatStream } from "../api";
 import type { Bubble, ToolStep } from "../types";
+import { metaLine } from "../lib/finishNote";
 
 export type ChatStatus = "idle" | "streaming" | "done" | "error";
 
@@ -151,9 +152,9 @@ export function useChatStream(
               setStatus("done");
               // 回答存库后消息数变了，列表要重取才能显示新的条数/顺序
               void qc.invalidateQueries({ queryKey: ["sessions"] });
-              setMeta(
-                `${ev.finish_reason ?? "?"} · ${ev.chars} 字 · ${ev.ms}ms · ${ev.rounds} 轮`,
-              );
+              // 正常结束时不显示任何东西（metaLine 返回空串）；
+              // 开发环境才会带上轮数/耗时/token 这些排查用的信息。
+              setMeta(metaLine(ev, import.meta.env.DEV));
               break;
             case "error":
               setStatus("error");

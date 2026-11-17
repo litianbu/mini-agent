@@ -48,6 +48,10 @@ export interface DoneEvent {
   finish_reason: string | null;
   ms: number;
   chars: number;
+  /** 下面三个由服务端统计，比本地估算准。调工具时会多次调用模型，这里是累加值 */
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
   rounds: number;
 }
 
