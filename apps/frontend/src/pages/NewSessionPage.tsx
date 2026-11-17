@@ -35,7 +35,7 @@ import { Markdown } from "../components/Markdown";
 import { useSession } from "../api/client";
 import { useActiveSession } from "../context/activeSession";
 import { useChatStream } from "../hooks/useChatStream";
-import type { Bubble, StoredMessage } from "../types";
+import type { Bubble, StoredMessage, ToolStep } from "../types";
 
 const STATUS_TAG = {
   idle: { color: "default", text: "空闲" },
@@ -53,16 +53,87 @@ function toolSummary(tools: Bubble["tools"]): string {
 
 /** 库里的消息 → 界面气泡。纯函数，方便单独测。 */
 export function toBubbles(messages: StoredMessage[] | undefined): Bubble[] {
-  return (messages ?? [])
-    // 工具结果（role=tool）没有正文，界面上也没有对应气泡，跳过
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({
+  const bubbles: Bubble[] = [];
+
+  // 工具结果先攒起来：它比"声明调用"的那条消息晚出现，
+  // 要等后面遇到才能配进去。
+  const results = new Map<string, { output: string; ok: boolean }>();
+  for (const m of messages ?? []) {
+    if (m.role === "tool" && m.tool_call_id) {
+      results.set(m.tool_call_id, { output: m.content, ok: true });
+    }
+  }
+
+  for (const m of messages ?? []) {
+    if (m.role === "user") {
+      bubbles.push({
+        id: `db-${m.id}`,
+        role: "user",
+        text: m.content,
+        reasoning: "",
+        tools: [],
+      });
+      continue;
+    }
+
+    if (m.role !== "assistant") continue; // tool 那条已经并进去了
+
+    // 把落库的 tool_calls 还原成界面上的工具步骤
+    let tools: ToolStep[] = [];
+    if (m.tool_calls) {
+      try {
+        const calls = JSON.parse(m.tool_calls) as Array<{
+          id: string;
+          function: { name: string; arguments: string };
+        }>;
+        tools = calls.map((c) => {
+          const r = results.get(c.id);
+          return {
+            id: c.id,
+            name: c.function.name,
+            arguments: c.function.arguments,
+            done: r !== undefined,
+            ok: r?.ok ?? true,
+            output: r?.output ?? "",
+          };
+        });
+      } catch {
+        // 坏数据不影响其它消息的显示
+        tools = [];
+      }
+    }
+
+    // 没正文也没工具调用的 assistant（比如纯声明后被中断），不占位
+    if (!m.content && tools.length === 0) continue;
+
+    const prev = bubbles[bubbles.length - 1];
+
+    // 合并条件：上一条是助手气泡，且上一条是「只声明了工具、还没正文」。
+    // 一轮工具调用在库里是两条 assistant 记录：
+    //   第 1 条 content 为空（只有 tool_calls），第 2 条是最终回答。
+    // 它们在界面上属于同一次回答，要并成一个气泡，否则会看到一大一小两个。
+    if (
+      prev &&
+      prev.role === "assistant" &&
+      prev.tools.length > 0 &&
+      !prev.text &&
+      tools.length === 0
+    ) {
+      prev.text = m.content;
+      prev.reasoning = m.reasoning ?? prev.reasoning;
+      continue;
+    }
+
+    bubbles.push({
       id: `db-${m.id}`,
-      role: m.role as "user" | "assistant",
+      role: "assistant",
       text: m.content,
       reasoning: m.reasoning ?? "",
-      tools: [],
-    }));
+      tools,
+    });
+  }
+
+  return bubbles;
 }
 
 /** 一条消息。用户的和助手的长得不一样，这是"谁在说话"最直观的提示。 */

@@ -109,6 +109,10 @@ export interface StoredMessage {
   role: string;
   content: string;
   reasoning: string | null;
+  /** assistant 那条才有：这次要调哪些工具（JSON 字符串，后端原样存的） */
+  tool_calls: string | null;
+  /** tool 那条才有：配对哪一次调用 */
+  tool_call_id: string | null;
   created_at: string;
 }
 
