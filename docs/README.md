@@ -11,6 +11,7 @@
 | [step-03.md](step-03.md) | S3 · 工具循环：让模型能读文件、跑命令 | ✅ |
 | [step-04.md](step-04.md) | S4 · grep 和 edit：按内容搜、精确改 | ✅ |
 | [step-05.md](step-05.md) | S5 · 会话持久化：存库、历史列表、续聊 | ✅ |
+| [step-06.md](step-06.md) | S6-1 · 让 token 用量看得见 | ✅ |
 
 > 看代码之前先翻 [`s1-code-map.md`](s1-code-map.md)。
 > 它把"从浏览器到模型再回来"的路径画成一张图，
