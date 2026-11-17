@@ -32,6 +32,12 @@ class MessageOut(BaseModel):
     role: str
     content: str
     reasoning: str | None = None
+
+    # 工具调用。assistant 那条带 tool_calls（JSON 串），
+    # 紧跟的 tool 那条带 tool_call_id —— 两者配对，缺一不可。
+    tool_calls: str | None = None
+    tool_call_id: str | None = None
+
     created_at: datetime
 
 
