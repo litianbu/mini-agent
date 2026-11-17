@@ -83,6 +83,12 @@ class DoneEvent(BaseModel):
     chars: int = 0
     rounds: int = 0  # 循环了几轮（一次工具调用算多轮），排查用
 
+    # token 用量。由服务端返回，比本地估算准。
+    # 一次提问如果调了工具，会调用模型多次，这里是**累加**值。
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
 
 class ErrorEvent(BaseModel):
     """出错。注意：出错也是一个**事件**，不是抛异常。

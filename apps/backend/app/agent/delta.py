@@ -34,20 +34,42 @@ class ToolCallDelta:
 
 
 @dataclass(slots=True)
+class Usage:
+    """这次调用花了多少 token。由服务端算好，我们只是收下。
+
+    为什么不自己数：分词规则在服务端，本地数永远有偏差。
+    自己估的用途不同 —— 那是"发出去之前"的预判（见 tokens.py）。
+    """
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+    def __add__(self, other: "Usage") -> "Usage":
+        return Usage(
+            self.prompt_tokens + other.prompt_tokens,
+            self.completion_tokens + other.completion_tokens,
+            self.total_tokens + other.total_tokens,
+        )
+
+
+@dataclass(slots=True)
 class Delta:
     """模型吐出的一小块。
 
-    四样东西都可能为空，也可能同时有：
+    五样东西都可能为空，也可能同时有：
       - reasoning：思考过程（DeepSeek 的 reasoning_content）
       - text：正文
       - tool_calls：工具调用碎片（S3 新增）
       - finish_reason：结束原因，只有最后一帧有
+      - usage：token 用量，只有最后一帧有（流式要显式开 include_usage）
     """
 
     reasoning: str = ""
     text: str = ""
     tool_calls: list[ToolCallDelta] = field(default_factory=list)
     finish_reason: str | None = None
+    usage: Usage | None = None
 
 
-__all__ = ["Delta", "ToolCallDelta"]
+__all__ = ["Delta", "ToolCallDelta", "Usage"]

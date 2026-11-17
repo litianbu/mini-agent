@@ -20,7 +20,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from ...core.config import settings
-from ..delta import Delta, ToolCallDelta
+from ..delta import Delta, ToolCallDelta, Usage
 from ..tools import schemas
 from .mock import mock_deltas
 from .sse import iter_frames
@@ -35,6 +35,7 @@ async def stream_deltas(messages: list[dict]) -> AsyncIterator[Delta]:
             yield delta
     else:
         async for delta in real_deltas(messages):
+            print('delta====', delta)
             yield delta
 
 
@@ -83,9 +84,27 @@ def parse_chunk(raw: str) -> list[Delta]:
     except json.JSONDecodeError:
         return []  # 心跳之类的杂帧，丢掉
 
+    # 先取 usage：它可能出现在任何一帧上，跟 choices 有没有内容无关。
+    #
+    # ⚠️ 实测这个网关的收尾帧长这样：
+    #     {"choices":[{"index":0,"delta":{}}],"usage":{...}}
+    #     choices 里有一个**空的** delta —— 所以不能靠"choices 为空"来识别它。
+    #     一开始我按 OpenAI 文档写成 if not choices，结果 usage 永远是 0。
+    u = obj.get("usage")
+    usage = (
+        Usage(
+            prompt_tokens=int(u.get("prompt_tokens") or 0),
+            completion_tokens=int(u.get("completion_tokens") or 0),
+            total_tokens=int(u.get("total_tokens") or 0),
+        )
+        if u
+        else None
+    )
+
     choices = obj.get("choices") or []
     if not choices:
-        return []  # 只带 usage 的收尾帧
+        # 只有 usage、没有正文的帧：单独作为一条 delta 吐出去
+        return [Delta(usage=usage)] if usage else []
 
     choice = choices[0]
     delta = choice.get("delta") or {}
@@ -106,9 +125,19 @@ def parse_chunk(raw: str) -> list[Delta]:
         for item in (delta.get("tool_calls") or [])
     ]
 
-    if not (reasoning or text or finish or calls):
+    # 什么都没解析到、也没有 usage 的帧（心跳之类）就丢掉
+    if not (reasoning or text or finish or calls or usage):
         return []
-    return [Delta(reasoning=reasoning, text=text, tool_calls=calls, finish_reason=finish)]
+
+    return [
+        Delta(
+            reasoning=reasoning,
+            text=text,
+            tool_calls=calls,
+            finish_reason=finish,
+            usage=usage,
+        )
+    ]
 
 
 def explain(exc: BaseException) -> str:

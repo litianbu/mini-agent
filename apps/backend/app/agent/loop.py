@@ -32,6 +32,7 @@ from .events import (
     ToolCallEvent,
     ToolResultEvent,
 )
+from .delta import Usage
 from .llm.client import explain, stream_deltas
 from .prompt import system_prompt
 from .tools import execute
@@ -92,6 +93,10 @@ async def chat(
     finish_reason: str | None = None
     rounds = 0
 
+    # token 用量：一次提问可能调用模型多次（每轮工具调用一次），
+    # 所以要累加，否则只能看到最后一轮的数字。
+    usage_total = Usage()
+
     # 复制一份：后面会往里追加 assistant / tool 消息。
     # 如果直接改调用方传进来的 list，多轮对话的历史会被污染。
     convo: list[Message] = list(messages)
@@ -113,7 +118,6 @@ async def chat(
             round_text = ""
 
             async for delta in stream_deltas(convo):
-                print('delta', delta)
                 if delta.reasoning:
                     yield ReasoningEvent(delta=delta.reasoning)
 
@@ -124,6 +128,9 @@ async def chat(
 
                 if delta.tool_calls:
                     acc.feed(delta.tool_calls)
+
+                if delta.usage:
+                    usage_total = usage_total + delta.usage
 
                 if delta.finish_reason:
                     finish_reason = delta.finish_reason
@@ -176,7 +183,6 @@ async def chat(
                     }
                 )
             # ③ 回到 while 顶部：带着工具结果再问模型一次
-            print('convo', convo)
 
         else:
             # while 正常跑满 MAX_ROUNDS 才会走到这里（没 break）
@@ -194,6 +200,9 @@ async def chat(
         return
 
     yield DoneEvent(
+        prompt_tokens=usage_total.prompt_tokens,
+        completion_tokens=usage_total.completion_tokens,
+        total_tokens=usage_total.total_tokens,
         finish_reason=finish_reason,
         ms=int((time.perf_counter() - started) * 1000),
         chars=total_chars,
