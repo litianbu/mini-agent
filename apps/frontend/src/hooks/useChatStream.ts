@@ -9,7 +9,7 @@
  * 为什么不是「一个 text 字符串」——因为一次会话会有多轮问答，
  * 只存一个字符串的话，上一轮的回答会被下一轮冲掉，用户看不到自己问过什么。
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { chatStream } from "../api";
 import type { Bubble, ToolStep } from "../types";
@@ -60,6 +60,20 @@ export function useChatStream(
 
   const stop = useCallback(() => {
     aborter.current?.abort();
+  }, []);
+
+  // 组件卸载时中止进行中的流。
+  //
+  // 不加这段会发生什么：用户在生成中途跳到别的页面（比如侧栏的会话列表），
+  // 组件没了，但 fetch 还连着 —— 浏览器不会自动关连接，
+  // 后端就继续跑完整个流程（最多 8 轮工具调用），为已经离开的人烧钱。
+  //
+  // 后端的取消传播只在"连接真的断开"时才有机会生效，
+  // 而连接断不断，前端说了算。所以这两个必须成对出现。
+  useEffect(() => {
+    return () => {
+      aborter.current?.abort();
+    };
   }, []);
 
   const send = useCallback((question: string) => {
@@ -169,7 +183,10 @@ export function useChatStream(
           setMeta("已停止");
         } else {
           setStatus("error");
-          setError(`网络错误：${(e as Error).message}`);
+          // 不再一律加"网络错误"前缀 —— 后端返回的 429/422
+          // 已经被翻译成人话了，前缀会把"服务端在拒绝"说成"网络有问题"，
+          // 排查方向直接跑偏。
+          setError(describe(e));
         }
       } finally {
         aborter.current = null;
@@ -188,4 +205,19 @@ export function useChatStream(
     send,
     stop,
   };
+}
+
+/**
+ * 把异常变成一句人话。
+ *
+ * 真正的网络故障（后端没起、断网）时，fetch 抛的是 TypeError，
+ * message 是英文的 "Failed to fetch" —— 对用户毫无信息量。
+ * 后端返回的 HTTP 错误则已经在 api/errors.ts 里翻译过了，直接用。
+ */
+function describe(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+    return "连不上后端，检查服务是否在运行";
+  }
+  return msg || "请求失败";
 }

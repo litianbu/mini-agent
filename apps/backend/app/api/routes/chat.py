@@ -30,6 +30,7 @@ from ...schemas.chat import ChatRequest
 from ...core.limiter import session_limiter
 from ...services import session_service
 from ..deps import get_db
+from ..streaming import bridge
 
 router = APIRouter()
 
@@ -75,7 +76,10 @@ async def post_chat(
 
     async def event_stream() -> AsyncIterator[str]:
         try:
-            async for chunk in _stream():
+            # bridge 负责两件事：边产边发、盯着客户端断开。
+            # 断开时它会取消产流任务 —— 取消信号一路传到 httpx 连接，
+            # 模型那边立刻停，不会继续为已经离开的用户烧钱。
+            async for chunk in bridge(_stream(), request):
                 yield chunk
         finally:
             # 不管是正常结束、出错、还是用户断开，都要放锁。
@@ -111,11 +115,9 @@ async def post_chat(
             round_saved = False
 
         async for event in chat(convo):
-            # 客户端断开（用户点了「停止」或关掉页面）就别接着生成 ——
-            # 每帧查一次，代价可忽略，省下的可能是真金白银。
-            if await request.is_disconnected():
-                return
-
+            # 断开检测不在这里做了 —— 交给 streaming.bridge。
+            # 原因：这一行只有在"产出新事件"时才执行，
+            # 而最需要切断的时刻恰恰是模型不产出任何事件的时候。
             if isinstance(event, StartEvent):
                 # start 事件补上 session_id，前端据此把地址栏切到 /sessions/123
                 event = event.model_copy(update={"session_id": session_id})

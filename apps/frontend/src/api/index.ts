@@ -31,31 +31,45 @@ export async function* chatStream(
   }
   if (!res.body) throw new Error("响应没有 body，无法读取流");
 
+  // res.body 是一个 ReadableStream：数据是一块块到的，不能用 res.json() 一次性拿完。
+  // getReader() 拿到流上的"读锁"（一条流同时只能有一个 reader），
+  // 之后靠循环 reader.read() 边到边解析 —— 这就是"流式"在前端的落点。
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    // stream: true —— 少写这个，中文会被切坏（和后端解析上游是同一个坑）
-    buf += decoder.decode(value, { stream: true });
+      // stream: true —— 少写这个，中文会被切坏（和后端解析上游是同一个坑）
+      buf += decoder.decode(value, { stream: true });
 
-    let idx: number;
-    while ((idx = buf.indexOf("\n\n")) >= 0) {
-      const frame = buf.slice(0, idx);
-      buf = buf.slice(idx + 2);
+      let idx: number;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
 
-      for (const line of frame.split("\n")) {
-        if (!line.startsWith("data:")) continue;
-        try {
-          yield JSON.parse(line.slice(5).trim()) as AgentEvent;
-        } catch {
-          /* 心跳等非 JSON 帧，忽略 */
+        for (const line of frame.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          try {
+            yield JSON.parse(line.slice(5).trim()) as AgentEvent;
+          } catch {
+            /* 心跳等非 JSON 帧，忽略 */
+          }
         }
       }
     }
+  } finally {
+    // 无论如何都要释放读锁。用户点停止时 reader.read() 会抛 AbortError，
+    // 不 cancel 的话这条流会一直挂在那儿，占着连接。
+    try {
+      await reader.cancel();
+    } catch {
+      /* 已经断了就别再抱怨 */
+    }
   }
 }
+
 /** 流式过程中页面的全部状态（hook 与页面共享这一个形状）。 */
