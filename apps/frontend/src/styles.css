@@ -57,15 +57,61 @@ body {
   box-shadow: 0 0 8px rgba(22, 119, 255, 0.7);
 }
 
-/* 菜单的滚动区。
-   `min-height: 0` 是这里最关键的一行，也是最容易漏的：
-   flex 子项的 min-height 默认是 auto（= 内容高度），
-   所以内容再高它也**不会缩小**，overflow 永远不会触发 ——
-   滚动条根本不会出现。显式写 0 才允许它被压缩到容器高度。
+/* ── 菜单里只有「历史会话」的列表滚动 ─────────────────────
 
-   这也解释了为什么"我明明写了 overflow-y: auto 却没滚动条"：
-   不是 overflow 没生效，是这个盒子压根没被限高。 */
+   为什么不能整个菜单一起滚：
+   「新会话」「全部会话」是**导航**，会话是**内容**。
+   会话可以无限多，导航永远只有两个。一起滚的话，
+   用户想点「新会话」还得先把列表滚回顶部。
+
+   所以要顺着 antd 的 DOM 铺一条 flex 链，把高度一路传下去：
+
+     .nav-scroll                          flex: 1
+       .ant-menu-root                     flex 列 + 满高
+         .ant-menu-item (新会话/全部会话)   flex: none   ← 固定
+         .ant-menu-submenu (历史会话)       flex: 1      ← 占满剩余
+           .ant-menu-submenu-title          flex: none   ← 标题固定
+           .ant-menu-sub                   flex: 1      ← 只有它滚
+
+   每一层都要 `min-height: 0`。flex 子项的 min-height 默认是 auto
+   （= 内容高度），内容再高也**不会缩小**，overflow 就永远不触发 ——
+   这就是"我写了 overflow-y: auto 却没有滚动条"的真正原因。 */
 .nav-scroll {
+  flex: 1;
+  min-height: 0;
+  /* 自己不滚，只负责把高度传下去 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nav-scroll > .ant-menu {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 两个导航项：不参与伸缩，永远留在顶部 */
+.nav-scroll > .ant-menu > .ant-menu-item {
+  flex: none;
+}
+
+/* 「历史会话」这一组：吃满剩余高度，并继续往下传 */
+.nav-scroll > .ant-menu > .ant-menu-submenu {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 分组标题：固定，跟着滚动的应该是它下面的列表 */
+.nav-scroll .ant-menu-submenu-title {
+  flex: none;
+}
+
+/* 真正的滚动区：会话列表 */
+.nav-scroll .ant-menu-sub {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -73,27 +119,26 @@ body {
   /* 最后一项不要贴着底边 */
   padding-bottom: 8px;
 
-  /* 暗色背景下默认滚动条太扎眼，收细一点。
-     Firefox 用这两个属性 */
+  /* 暗色背景下默认滚动条太扎眼，收细一点（Firefox） */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
 /* Chrome / Safari / Edge 要单独写伪元素 */
-.nav-scroll::-webkit-scrollbar {
+.nav-scroll .ant-menu-sub::-webkit-scrollbar {
   width: 8px;
 }
 
-.nav-scroll::-webkit-scrollbar-track {
+.nav-scroll .ant-menu-sub::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.nav-scroll::-webkit-scrollbar-thumb {
+.nav-scroll .ant-menu-sub::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.18);
   border-radius: 4px;
 }
 
-.nav-scroll::-webkit-scrollbar-thumb:hover {
+.nav-scroll .ant-menu-sub::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 

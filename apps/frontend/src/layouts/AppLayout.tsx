@@ -111,18 +111,22 @@ export default function AppLayout() {
             // 默认展开历史会话：刷新在 /sessions/20 时，用户一眼能看到自己那条
             defaultOpenKeys={[SESSIONS_GROUP_KEY]}
             items={[
+              // 这两项是**导航**，不该跟着会话列表一起滚。
+              // 会话可以无限多，导航永远只有两个 —— 混在一起滚，
+              // 用户想点"新会话"还得先滚回顶部，很难受。
               {
                 key: NEW_CHAT_KEY,
                 label: <NavLink to={NEW_CHAT_KEY}>新会话</NavLink>,
               },
               {
+                key: ALL_SESSIONS_KEY,
+                label: <NavLink to={ALL_SESSIONS_KEY}>全部会话</NavLink>,
+              },
+              // 只有这一组会滚动（会话数量无上限）
+              {
                 key: SESSIONS_GROUP_KEY,
                 label: "历史会话",
                 children: [
-                  {
-                    key: ALL_SESSIONS_KEY,
-                    label: <NavLink to={ALL_SESSIONS_KEY}>全部会话</NavLink>,
-                  },
                   // 会话本身作为子项。标题太长就省略（样式在 .nav-session）
                   ...list.map((s) => ({
                     key: `/sessions/${s.id}`,
