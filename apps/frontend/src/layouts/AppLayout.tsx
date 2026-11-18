@@ -92,6 +92,8 @@ export default function AppLayout() {
       <Layout.Sider
         width={220}
         theme="dark"
+        /* styles.css 里的三段式布局挂在这个 class 上 */
+        className="sider"
         style={{ borderInlineEnd: "1px solid rgba(255,255,255,.08)" }}
       >
         <div className="brand">
@@ -99,52 +101,56 @@ export default function AppLayout() {
           <Typography.Text strong>mini-agent</Typography.Text>
         </div>
 
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[selected]}
-          // 默认展开历史会话：刷新在 /sessions/20 时，用户一眼能看到自己那条
-          defaultOpenKeys={[SESSIONS_GROUP_KEY]}
-          items={[
-            {
-              key: NEW_CHAT_KEY,
-              label: <NavLink to={NEW_CHAT_KEY}>新会话</NavLink>,
-            },
-            {
-              key: SESSIONS_GROUP_KEY,
-              label: "历史会话",
-              children: [
-                {
-                  key: ALL_SESSIONS_KEY,
-                  label: <NavLink to={ALL_SESSIONS_KEY}>全部会话</NavLink>,
-                },
-                // 会话本身作为子项。标题太长就省略（样式在 .nav-session）
-                ...list.map((s) => ({
-                  key: `/sessions/${s.id}`,
-                  label: (
-                    <NavLink to={`/sessions/${s.id}`} className="nav-session">
-                      {s.title || "未命名"}
-                    </NavLink>
-                  ),
-                })),
-                ...(list.length === 0 && !sessions.isPending
-                  ? [
-                      {
-                        key: "no-sessions",
-                        label: (
-                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                            还没有会话
-                          </Typography.Text>
-                        ),
-                        disabled: true,
-                      },
-                    ]
-                  : []),
-              ],
-            },
-          ]}
-          style={{ background: "transparent" }}
-        />
+        {/* 滚动容器。会话多了要能滚 —— 不能滚的话，超出可视区的会话
+            就永远点不到了。样式见 styles.css 的 .nav-scroll */}
+        <div className="nav-scroll">
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[selected]}
+            // 默认展开历史会话：刷新在 /sessions/20 时，用户一眼能看到自己那条
+            defaultOpenKeys={[SESSIONS_GROUP_KEY]}
+            items={[
+              {
+                key: NEW_CHAT_KEY,
+                label: <NavLink to={NEW_CHAT_KEY}>新会话</NavLink>,
+              },
+              {
+                key: SESSIONS_GROUP_KEY,
+                label: "历史会话",
+                children: [
+                  {
+                    key: ALL_SESSIONS_KEY,
+                    label: <NavLink to={ALL_SESSIONS_KEY}>全部会话</NavLink>,
+                  },
+                  // 会话本身作为子项。标题太长就省略（样式在 .nav-session）
+                  ...list.map((s) => ({
+                    key: `/sessions/${s.id}`,
+                    label: (
+                      <NavLink to={`/sessions/${s.id}`} className="nav-session">
+                        {s.title || "未命名"}
+                      </NavLink>
+                    ),
+                  })),
+                  ...(list.length === 0 && !sessions.isPending
+                    ? [
+                        {
+                          key: "no-sessions",
+                          label: (
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              还没有会话
+                            </Typography.Text>
+                          ),
+                          disabled: true,
+                        },
+                      ]
+                    : []),
+                ],
+              },
+            ]}
+            style={{ background: "transparent" }}
+          />
+        </div>
 
         <div className="sider-foot">
           {/* 三种状态都画出来：loading / 连不上 / 正常。
