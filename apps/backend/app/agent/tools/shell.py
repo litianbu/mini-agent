@@ -46,6 +46,16 @@ async def run_bash(args: dict[str, object]) -> str:
             proc.kill()
             await proc.wait()
             return f"超时（{timeout}s）已终止：{command}"
+        except asyncio.CancelledError:
+            # 用户点停止 / 请求被取消。取消信号只打断了"等"，
+            # 进程本身不会跟着死 —— 它会变成孤儿，继续占 CPU，
+            # 而且没人再能看到它的输出。
+            #
+            # 注意 CancelledError 不是 Exception 的子类（3.8+），
+            # 所以下面那个 except Exception 兜不住它，必须单独接。
+            proc.kill()
+            await proc.wait()
+            raise          # 取消必须继续往外传，否则上层以为正常结束了
 
     except Exception as exc:
         return f"执行失败：{exc}"
