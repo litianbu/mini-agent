@@ -35,6 +35,7 @@ from .events import (
 from .delta import Usage
 from .context import trim_to_budget
 from .llm.client import explain, stream_deltas
+from .llm.routing import MAIN, resolve
 from .prompt import system_prompt
 from .tools import execute
 
@@ -80,6 +81,7 @@ async def chat(
     messages: list[Message],
     *,
     thinking: bool | None = None,
+    role: str = MAIN,
 ) -> AsyncIterator[AgentEvent]:
     """一次对话 = 一串事件。
 
@@ -110,8 +112,14 @@ async def chat(
     if not convo or convo[0].get("role") != "system":
         convo.insert(0, {"role": "system", "content": system_prompt()})
 
+    # 模型只在这里算一次，报给前端的和真正用的必须是**同一个值**。
+    # 两次独立计算（一次给 StartEvent、一次给 stream_deltas）是隐患：
+    # 将来一旦有个分支改了其中一处，界面显示的就是错的模型，
+    # 而且不会有任何报错 —— 只会让人查半天"Why 显示 A 实际用 B"。
+    model = resolve(role)
+
     yield StartEvent(
-        model="mock" if settings.is_mock else settings.llm_model,
+        model="mock" if settings.is_mock else model,
         mock=settings.is_mock,
     )
 
@@ -130,13 +138,12 @@ async def chat(
                 # 每轮都裁，不是只在入口裁一次 ——
                 # 工具输出会在一轮内不断累积，入口裁过之后还会涨回去。
                 convo, dropped = trim_to_budget(convo, settings.context_budget)
-                print('剩余的', convo, '裁掉的', dropped)
                 if dropped:
                     trimmed_total += dropped
                     # 裁剪会改缓存前缀，日志里留个痕迹，排查"为什么它忘了"时有用
                     print(f"[context] 超出预算，裁掉 {dropped} 条")
 
-                async for delta in stream_deltas(convo):
+                async for delta in stream_deltas(convo, model=model):
                     if delta.reasoning:
                         yield ReasoningEvent(delta=delta.reasoning)
 

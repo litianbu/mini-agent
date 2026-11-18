@@ -28,34 +28,68 @@ from .sse import iter_frames
 __all__ = ["Delta", "stream_deltas", "explain"]
 
 
-async def stream_deltas(messages: list[dict]) -> AsyncIterator[Delta]:
-    """唯一的对外入口。有 key 走真模型，没 key 走假模型。"""
+async def stream_deltas(
+    messages: list[dict],
+    *,
+    model: str | None = None,
+) -> AsyncIterator[Delta]:
+    """唯一的对外入口。有 key 走真模型，没 key 走假模型。
+
+    `model` 为 None 时用默认模型 —— 这样绝大多数调用点不用改，
+    只有需要指定角色的地方（loop.py 传路由结果）才传。
+    """
     if settings.is_mock:
+        # 假模型不关心用哪个真模型，但它得接受这个参数，
+        # 否则 mock 模式下调用点要写两套分支
         async for delta in mock_deltas(messages):
             yield delta
     else:
-        async for delta in real_deltas(messages):
-            print('delta====', delta)
+        async for delta in real_deltas(messages, model=model):
             yield delta
 
 
-async def real_deltas(messages: list[dict]) -> AsyncIterator[Delta]:
-    """真模型：POST + SSE，边收边吐。"""
-    url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+def build_payload(
+    messages: list[dict],
+    *,
+    model: str | None = None,
+    tools: list[dict] | None = None,
+) -> dict:
+    """组装请求体。
 
+    **为什么 tools 是参数，而不是在这里 await schemas()**：
+    `schemas()` 在 S10 之后是 async 的（要问 MCP 服务器要清单），
+    而这个函数想保持同步纯函数 —— 纯函数能直接测"模型名传对没有"，
+    不用 monkeypatch 整个 httpx，测试也就不会又长又脆。
+
+    拿工具清单是调用方的事，组装请求体是这里的事。
+    """
     payload: dict = {
-        "model": settings.llm_model,
+        "model": model or settings.llm_model,
         "messages": messages,
         "stream": True,
         # 让最后一帧带上 token 用量（不加的话 usage 永远是 null）
         "stream_options": {"include_usage": True},
         # S3：把工具清单告诉模型。它据此决定要不要调用、调哪个。
-        "tools": await schemas(),
+        "tools": tools or [],
         "tool_choice": "auto",
     }
     # DeepSeek 的思考模式是个非标准扩展，只有它的接口认这个字段
     if settings.thinking and "deepseek" in settings.llm_base_url:
         payload["thinking"] = {"type": "enabled"}
+    return payload
+
+
+async def real_deltas(
+    messages: list[dict],
+    *,
+    model: str | None = None,
+) -> AsyncIterator[Delta]:
+    """真模型：POST + SSE，边收边吐。"""
+    url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+
+    # 拿工具清单要 await（可能要去问 MCP 服务器），
+    # 组装 payload 是纯函数的活 —— 分开做
+    payload = build_payload(messages, model=model, tools=await schemas())
 
     headers = {
         "Authorization": f"Bearer {settings.api_key}",

@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # 就只能当作已泄露，去后台吊销重发。
     llm_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-flash"
+    # 子 agent 用的模型（S9）。留空 = 和主模型一样 ——
+    # 只有一套模型的人不用改任何配置；想省钱时填个便宜模型名即可。
+    llm_model_sub: str = ""
     thinking: bool = False
     mock: bool = False
     port: int = 8787
