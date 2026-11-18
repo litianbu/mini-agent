@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ..mcp.convert import PREFIX
+from ..mcp.registry import mcp_servers
 from .base import Tool
 from .edit import EDIT
 from .fs import GLOB_SEARCH, READ_FILE, WRITE_FILE
@@ -21,9 +23,16 @@ ALL_TOOLS: list[Tool] = [READ_FILE, WRITE_FILE, EDIT, GLOB_SEARCH, GREP, RUN_BAS
 _BY_NAME: dict[str, Tool] = {tool.name: tool for tool in ALL_TOOLS}
 
 
-def schemas() -> list[dict[str, Any]]:
-    """给模型看的工具清单（放进请求的 tools 字段）。"""
-    return [tool.schema() for tool in ALL_TOOLS]
+async def schemas() -> list[dict[str, Any]]:
+    """给模型看的工具清单（放进请求的 tools 字段）。
+
+    **为什么要 async**：MCP 工具不在本地，得先问到对方
+    （"你有哪些工具？"）才拿得到清单。这是进程往返，必须 await。
+
+    本地工具在前、MCP 工具在后 —— 顺序不影响功能，
+    但固定下来，测试和日志读起来稳定。
+    """
+    return [tool.schema() for tool in ALL_TOOLS] + await mcp_servers.schemas()
 
 
 async def execute(name: str, arguments: str) -> str:
@@ -35,6 +44,16 @@ async def execute(name: str, arguments: str) -> str:
     这两种都不能让整个对话崩掉：把错误当成"工具结果"返回给模型，
     它看到错误信息往往会自己纠正，这比直接抛异常有用得多。
     """
+    # MCP 工具先分流：它们不在本地注册表里
+    if name.startswith(PREFIX):
+        try:
+            args = json.loads(arguments) if arguments.strip() else {}
+        except json.JSONDecodeError as exc:
+            return f"错误：参数不是合法 JSON（{exc}）。收到的是：{arguments[:200]}"
+        if not isinstance(args, dict):
+            return f"错误：MCP 工具的参数必须是对象，收到 {type(args).__name__}"
+        return await mcp_servers.call(name, args)
+
     tool = _BY_NAME.get(name)
     if tool is None:
         return f"错误：没有名为 {name!r} 的工具。可用：{', '.join(_BY_NAME)}"

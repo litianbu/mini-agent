@@ -50,7 +50,7 @@ async def real_deltas(messages: list[dict]) -> AsyncIterator[Delta]:
         # 让最后一帧带上 token 用量（不加的话 usage 永远是 null）
         "stream_options": {"include_usage": True},
         # S3：把工具清单告诉模型。它据此决定要不要调用、调哪个。
-        "tools": schemas(),
+        "tools": await schemas(),
         "tool_choice": "auto",
     }
     # DeepSeek 的思考模式是个非标准扩展，只有它的接口认这个字段

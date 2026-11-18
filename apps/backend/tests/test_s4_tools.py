@@ -26,8 +26,18 @@ def demo_file():
     f.unlink(missing_ok=True)
 
 
-def test_six_tools_registered() -> None:
-    names = {s["function"]["name"] for s in schemas()}
+@pytest.mark.asyncio
+async def test_six_tools_registered() -> None:
+    """本地工具是这六个。
+
+    S10 之后清单里还会混进 MCP 工具（`mcp__` 开头），
+    所以这里只校验本地那部分 —— 断言"等于六个"会误伤扩展。
+    """
+    names = {
+        s["function"]["name"]
+        for s in await schemas()
+        if not s["function"]["name"].startswith("mcp__")
+    }
     assert names == {"read_file", "write_file", "edit", "glob", "grep", "bash"}
 
 

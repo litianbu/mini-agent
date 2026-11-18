@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from . import __version__
+from .agent.mcp.registry import mcp_servers
 from .api.routes import chat, health, sessions
 from .core import database
 from .core.config import REPO_ROOT, settings
@@ -47,6 +48,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             print(f"! 数据库连接失败（服务继续启动）: {exc}")
 
     yield
+
+    # 退出时把 MCP 子进程杀干净。
+    #
+    # 不做这一步的话：uvicorn 重启一次就漏一个子进程，
+    # 开发时改几行代码，系统里就攒一堆 python -m weather_server。
+    # 子进程不会因为父进程退出就自动死掉（除非父进程是终端且发了 SIGHUP）。
+    try:
+        await mcp_servers.aclose()
+    except Exception as exc:
+        print(f"! 关闭 MCP 连接失败: {exc}")
 
     # 退出时把连接池还回去，否则 reload 几次就会攒一堆僵尸连接
     await database.dispose()
