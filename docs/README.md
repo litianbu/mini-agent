@@ -13,6 +13,8 @@
 | [step-05.md](step-05.md) | S5 · 会话持久化：存库、历史列表、续聊 | ✅ |
 | [step-06.md](step-06.md) | S6-1 · 让 token 用量看得见 | ✅ |
 | [step-07.md](step-07.md) | S6-2 · 上下文裁剪（L1 滑动窗口） | ✅ |
+| [step-08.md](step-08.md) | S7 · HTTP 加固：限流、超时、取消传播 | ✅ |
+| [step-09.md](step-09.md) | S10 · MCP：接入外部工具 | ✅ |
 
 > 看代码之前先翻 [`s1-code-map.md`](s1-code-map.md)。
 > 它把"从浏览器到模型再回来"的路径画成一张图，
