@@ -15,6 +15,7 @@
 | [step-07.md](step-07.md) | S6-2 · 上下文裁剪（L1 滑动窗口） | ✅ |
 | [step-08.md](step-08.md) | S7 · HTTP 加固：限流、超时、取消传播 | ✅ |
 | [step-09.md](step-09.md) | S10 · MCP：接入外部工具 | ✅ |
+| [step-10.md](step-10.md) | S12-1 · 文档切分：RAG 的第一步 | ✅ |
 
 > 看代码之前先翻 [`s1-code-map.md`](s1-code-map.md)。
 > 它把"从浏览器到模型再回来"的路径画成一张图，

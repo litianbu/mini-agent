@@ -250,6 +250,7 @@ curl localhost:8787/api/health                                 # 看 db 字段
 | S6-2 | [step-07](step-07.md) | 上下文裁剪（L1 滑动窗口） |
 | S7 | [step-08](step-08.md) | 限流、超时、取消传播 |
 | S10 | [step-09](step-09.md) | MCP 接入外部工具 |
+| S12-1 | [step-10](step-10.md) | 语义边界切分、代码块保护、重叠 |
 
 ### 实测数据（决定后续阈值的依据）
 

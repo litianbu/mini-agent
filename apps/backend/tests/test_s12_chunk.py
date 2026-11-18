@@ -6,6 +6,7 @@
 
 from app.rag.chunk import (
     Chunk,
+    fences_balanced,
     split_by_separators,
     split_markdown,
     split_sections,
@@ -123,7 +124,7 @@ def test_oversized_code_block_keeps_fences_balanced() -> None:
     chunks = split_markdown(text, max_chars=300, overlap=50)
     assert len(chunks) >= 2, "这个代码块应该被切成多片"
     for c in chunks:
-        assert c.content.count("```") % 2 == 0, f"围栏不配对: {c.content[:40]!r}"
+        assert fences_balanced(c.content), f"围栏不配对: {c.content[:40]!r}"
         assert len(c) <= 300
 
 
@@ -152,7 +153,7 @@ def test_no_dangling_fence_across_overlap() -> None:
     code = "```python\n" + "\n".join(f"x{i} = {i}" for i in range(30)) + "\n```"
     text = f"# T\n\n{body}\n\n{code}\n\n{body}\n"
     for c in split_markdown(text, max_chars=300, overlap=80):
-        assert c.content.count("```") % 2 == 0, f"落单围栏: {c.content[-60:]!r}"
+        assert fences_balanced(c.content), f"落单围栏: {c.content[-60:]!r}"
 
 
 def test_real_docs_have_no_broken_fences() -> None:
@@ -168,6 +169,6 @@ def test_real_docs_have_no_broken_fences() -> None:
         return  # 没有 docs 就跳过
     for path in sorted(docs_dir.glob("*.md")):
         for c in split_markdown(path.read_text(encoding="utf-8"), source=path.name):
-            assert c.content.count("```") % 2 == 0, (
+            assert fences_balanced(c.content), (
                 f"{path.name} 有落单围栏: {c.content[:60]!r}"
             )

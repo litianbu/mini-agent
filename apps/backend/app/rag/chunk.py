@@ -125,6 +125,23 @@ def split_sections(text: str) -> list[tuple[str, str]]:
     return sections
 
 
+def fences_balanced(text: str) -> bool:
+    """围栏是否配对（每一片的代码块都完整闭合）。
+
+    判定必须**按行首**：只有位于行首的三个反引号才是围栏。
+    行内出现的（比如正文里举例说明围栏长什么样）不算。
+
+    这个细节是有代价的：第一版测试用 text.count("```") % 2 判断，
+    结果把"讨论围栏本身"的文档误判成断裂 —— 假警报。
+    和 split_blocks() 用同一套规则，才不会自相矛盾。
+    """
+    depth = 0
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            depth ^= 1
+    return depth == 0
+
+
 def split_blocks(text: str) -> list[tuple[str, bool]]:
     """把正文切成块，返回 [(块内容, 是不是代码块)]。
 
