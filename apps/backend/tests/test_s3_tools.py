@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import pytest
+import pytest_asyncio
 
 import json
 
@@ -16,6 +17,24 @@ from app.agent.delta import ToolCallDelta
 from app.agent.events import ToolCallEvent, ToolResultEvent
 from app.agent.loop import _Accumulator
 from app.agent.tools import execute, schemas
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _close_mcp_after():
+    """用完关掉 MCP 连接。
+
+    `schemas()` 会懒启动 MCP 子进程（第一次调用时才起）。
+    测试只调了 schemas() 却没关，进程就留在系统里了 ——
+    pytest 退出后你还得手动 pkill，很烦。
+
+    这里每个用例结束后统一收尾。用 autouse 而不是每个用例自己写，
+    是因为以后再加测试也不会忘。
+    """
+    yield
+    from app.agent.mcp.registry import mcp_servers
+
+    await mcp_servers.aclose()
+
 
 
 def test_fragments_are_concatenated() -> None:
