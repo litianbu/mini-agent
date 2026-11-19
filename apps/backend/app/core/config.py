@@ -115,6 +115,23 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 64
     embedding_timeout: float = 30.0
 
+    # ── 向量库 Milvus（S12-3）───────────────────────────
+    # 字段名照真实项目：MILVUS_URI / MILVUS_TOKEN。
+    #
+    # 为什么集合名默认留空：
+    #   集合名一旦建出来就不好改（要重建 + 重新灌数据），
+    #   所以宁可空着报错，也不要替你选一个名字。
+    #   填进 .env 的 MILVUS_COLLECTION 才会开始工作。
+    #
+    # 用 uri + token 而不是"用户名密码"两个字段：
+    #   Milvus 的认证就是 token（"用户名:密码" 这种形式），
+    #   而 uri 同时承载"连本地文件"和"连服务端"两种模式。
+    milvus_uri: str = "http://172.30.1.221:19530"
+    milvus_token: str = ""  # ← 只在 .env 里出现
+    milvus_db: str = "default"  # ← 还没定名字，定了再填
+    milvus_collection: str = ""  # ← 还没定名字，定了再填
+    milvus_timeout: float = 10.0
+
     @property
     def api_key(self) -> str:
         return self.deepseek_api_key or self.llm_api_key or self.openai_api_key
@@ -146,6 +163,15 @@ class Settings(BaseSettings):
         这种"看起来在工作"的故障最难查。
         """
         return bool(self.embedding_api_key)
+
+    @property
+    def milvus_enabled(self) -> bool:
+        """三项齐了才算配好：地址、token、集合名。
+
+        少任何一项都直接报错，而不是连上去之后在 Milvus 那边报
+        "collection not found" —— 那个错误会让人以为是数据没了。
+        """
+        return bool(self.milvus_uri and self.milvus_token and self.milvus_collection)
 
     @property
     def db_enabled(self) -> bool:
