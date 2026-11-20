@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import httpx
 
@@ -153,11 +154,15 @@ async def embed_texts(
     batch_size: int | None = None,
     retries: int = 2,
     client: httpx.AsyncClient | None = None,
+    verbose: bool = False,
 ) -> list[list[float]]:
     """把一批文本变成向量，顺序和传入一一对应。
 
     `client` 参数是给测试用的：单测传一个 MockTransport 的 client，
     就不会真的打网络。生产代码不传，函数自己建。
+
+    `verbose=True` 时逐批打印进度和耗时 —— 灌库时盯着看，能立刻发现
+    "某批特别慢"（通常是限流退避）或者"批次数量不对"（切分出了问题）。
     """
     _check_config()
 
@@ -185,9 +190,18 @@ async def embed_texts(
         #
         # 并发能快 3-4 倍，但会让限流更容易触发，也会把"哪批失败了"变得难追踪。
         # 228 个片段分批约 4 次请求、2 秒左右，不值得为这点时间换复杂度。
-        for start in range(0, len(texts), size):
+        total_batches = (len(texts) + size - 1) // size
+        for i, start in enumerate(range(0, len(texts), size), 1):
             batch = texts[start : start + size]
+            t0 = time.perf_counter()
             out.extend(await _embed_batch(client, batch, retries=retries))
+            if verbose:
+                print(
+                    f"        批次 {i}/{total_batches}  "
+                    f"{len(batch):3d} 条  {time.perf_counter() - t0:5.2f}s"
+                )
+        if verbose:
+            print(f"        → 共 {len(out)} 个向量（每个 {settings.embedding_dimension} 维）")
         return out
     finally:
         # 只关自己建的 client；外面传进来的由调用方负责

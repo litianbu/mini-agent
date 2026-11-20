@@ -172,3 +172,14 @@ def test_real_docs_have_no_broken_fences() -> None:
             assert fences_balanced(c.content), (
                 f"{path.name} 有落单围栏: {c.content[:60]!r}"
             )
+
+def test_split_markdown_prints_nothing(capsys) -> None:
+    """切分是纯函数，不许往 stdout 写东西。
+
+    为什么专门测这个：调试 print 留在库里最难被发现 —— 它不报错，
+    只是每次切分都往日志里灌一大坨对象 repr。这次就漏了三处。
+    """
+    text = "# 甲\n\n第一段。\n\n## 甲二\n\n第二段。\n"
+    split_markdown(text, source="a.md")
+    out = capsys.readouterr()
+    assert out.out == "", f"split_markdown 不该有输出，实际打印：{out.out[:200]!r}"

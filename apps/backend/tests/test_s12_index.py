@@ -77,7 +77,7 @@ def fake_embed(monkeypatch: pytest.MonkeyPatch):
     """替换掉真实 embedding 调用，并记录每次批量的大小。"""
     batches: list[int] = []
 
-    async def _embed(texts: list[str]) -> list[list[float]]:
+    async def _embed(texts: list[str], **kwargs) -> list[list[float]]:
         batches.append(len(texts))
         return [[0.1] * DIM for _ in texts]
 
@@ -164,3 +164,43 @@ def test_docs_dir_defaults_to_repo_docs() -> None:
     """默认目录必须指向仓库的 docs/，否则 --rebuild 会灌错地方。"""
     assert index_mod.DEFAULT_DOCS_DIR.name == "docs"
     assert (index_mod.DEFAULT_DOCS_DIR / "00-plan.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_rebuild_prints_each_stage(docs_dir, fake_embed, capsys) -> None:
+    """每一步都要有输出。
+
+    这个入口是给人看着跑的：删掉某一步的 print，等于把那次排查的眼睛蒙上。
+    所以用测试把"每一步都看得见"钉住。
+    """
+    await index_mod.rebuild(FakeClient(), docs_dir)
+    out = capsys.readouterr().out
+    for word in ("读文件", "切分", "向量化", "先删旧版", "再插新版", "本篇合计", "耗时"):
+        assert word in out, f"缺少这一步的输出：{word}"
+
+
+@pytest.mark.asyncio
+async def test_rebuild_only_one_file(docs_dir, fake_embed) -> None:
+    """--file 只处理那一篇：别的文档一条都不能动。
+
+    这是"一个个来"的保证：如果哪天 only 参数失效变成全量，
+    用户以为只灌了一篇，实际把整个目录重灌了一遍 —— 不会报错，只会更慢。
+    """
+    client = FakeClient()
+    docs, chunks = await index_mod.rebuild(client, docs_dir, only="a.md")
+
+    assert docs == 1
+    assert chunks > 0
+    assert client.names().count("delete") == 1
+    assert client.names().count("insert") == 1
+    for name, kwargs in client.calls:
+        if name in ("delete", "insert"):
+            assert "a.md" in str(kwargs)
+            assert "b.md" not in str(kwargs)
+
+
+@pytest.mark.asyncio
+async def test_rebuild_only_missing_file_raises(docs_dir, fake_embed) -> None:
+    """文件名写错要立刻报错，而不是静默"成功灌 0 条"。"""
+    with pytest.raises(SystemExit):
+        await index_mod.rebuild(FakeClient(), docs_dir, only="nope.md")

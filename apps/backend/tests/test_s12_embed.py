@@ -146,3 +146,19 @@ async def test_empty_input_list_is_fine() -> None:
     """空列表不算错误，返回空列表。"""
     client = make_client(lambda r: ok_response([]))
     assert await embed_texts([], client=client) == []
+
+
+async def test_verbose_prints_batch_progress(capsys) -> None:
+    """verbose 时逐批打印：能看出分了几批、每批多少条、各花多久。
+
+    灌库时"卡在哪一批"和"某批特别慢（限流退避）"都要靠这几行看出来。
+    """
+    def handler(request: httpx.Request) -> httpx.Response:
+        return ok_response(json.loads(request.content)["input"])
+
+    client = make_client(handler)
+    await embed_texts(["a", "b", "c"], batch_size=2, client=client, verbose=True)
+    out = capsys.readouterr().out
+    assert "批次 1/2" in out
+    assert "批次 2/2" in out
+    assert "共 3 个向量" in out

@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -158,7 +159,7 @@ def get_client() -> MilvusClient:
     )
 
 
-def ensure_collection(client: MilvusClient) -> bool:
+def ensure_collection(client: MilvusClient, *, verbose: bool = False) -> bool:
     """集合不存在才建。返回"这次是否真的建了"。
 
     为什么不无脑 create：
@@ -167,12 +168,21 @@ def ensure_collection(client: MilvusClient) -> bool:
     """
     name = _collection_name()
     if client.has_collection(name):
+        if verbose:
+            print(f"    集合        {name} 已存在，跳过创建")
         return False
     client.create_collection(
         collection_name=name,
         schema=build_schema(settings.embedding_dimension),
         index_params=build_index_params(),
     )
+    if verbose:
+        print(f"    集合        {name} 新建 ✓")
+        print(
+            f"    字段        id / vector({settings.embedding_dimension}) / "
+            "source / heading / content / chunk_index / is_deleted"
+        )
+        print(f"    索引        AUTOINDEX · {METRIC_TYPE}")
     return True
 
 
@@ -221,6 +231,8 @@ def save_source(
     source: str,
     chunks: list[Chunk],
     vectors: list[list[float]],
+    *,
+    verbose: bool = False,
 ) -> int:
     """写入一篇文档的全部片段。返回写入条数。
 
@@ -246,7 +258,13 @@ def save_source(
     _check_lengths(source, chunks)
 
     # 先删旧版本（同一 source）
-    client.delete(collection_name=name, filter=f"source == {_quote(source)}")
+    deleted = client.delete(collection_name=name, filter=f"source == {_quote(source)}")
+    if verbose:
+        n_del = deleted.get("delete_count") if isinstance(deleted, dict) else None
+        print(
+            "    先删旧版    "
+            + (f"{n_del} 条" if n_del is not None else "已发出（旧版本按 source 删除）")
+        )
 
     rows: list[dict[str, Any]] = [
         {
@@ -259,11 +277,14 @@ def save_source(
         }
         for c, vector in zip(chunks, vectors)
     ]
-    client.insert(collection_name=name, data=rows)
+    inserted = client.insert(collection_name=name, data=rows)
+    if verbose:
+        n_ins = inserted.get("insert_count") if isinstance(inserted, dict) else None
+        print(f"    再插新版    {n_ins if n_ins is not None else len(rows)} 条")
     return len(rows)
 
 
-def flush(client: MilvusClient) -> None:
+def flush(client: MilvusClient, *, verbose: bool = False) -> None:
     """强制把刚写入的数据变成"可见"。
 
     为什么需要：Milvus 是**最终一致性**的 —— insert 返回成功，
@@ -274,10 +295,16 @@ def flush(client: MilvusClient) -> None:
     代价是有 IO，所以只在"写完之后要立刻读"的地方调
     （建索引脚本），不要放进 save_source 里每次都刷。
     """
-    client.flush(_collection_name())
+    name = _collection_name()
+    if verbose:
+        print(f"    flush       {name}（把内存里的数据落盘，之后立刻可查）")
+    t0 = time.perf_counter()
+    client.flush(name)
+    if verbose:
+        print(f"    落盘完成    {time.perf_counter() - t0:.2f}s")
 
 
-def count(client: MilvusClient, *, include_deleted: bool = False) -> int:
+def count(client: MilvusClient, *, include_deleted: bool = False, verbose: bool = False) -> int:
     """有多少条。默认不算软删除的。
 
     注意：不要用 `filter="id >= 0"` 再 count ——
@@ -286,6 +313,8 @@ def count(client: MilvusClient, *, include_deleted: bool = False) -> int:
     """
     name = _collection_name()
     expr = "" if include_deleted else "is_deleted == false"
+    if verbose:
+        print(f"    count       过滤条件 = {expr or '(不过滤)'}")
     rows = client.query(
         collection_name=name,
         filter=expr,
@@ -302,6 +331,7 @@ def search(
     *,
     top_k: int = 10,
     source: str | None = None,
+    verbose: bool = False,
 ) -> list[Hit]:
     """按相似度找 top_k 条。
 
@@ -318,6 +348,12 @@ def search(
     if source:
         expr = f"{expr} and source == {_quote(source)}"
 
+    if verbose:
+        print(f"    load        {name} 已加载进内存")
+        print(f"    过滤条件    {expr}")
+        print(f"    取前        {top_k} 条")
+
+    t0 = time.perf_counter()
     results = client.search(
         collection_name=name,
         data=[vector],
@@ -340,4 +376,6 @@ def search(
                 chunk_index=int(entity.get("chunk_index", -1)),
             )
         )
+    if verbose:
+        print(f"    检索完成    {len(hits)} 条命中  {time.perf_counter() - t0:.3f}s")
     return hits

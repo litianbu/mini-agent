@@ -291,3 +291,37 @@ def test_search_on_empty_collection_returns_empty_list() -> None:
 def test_search_rejects_bad_top_k() -> None:
     with pytest.raises(VectorStoreError, match="top_k"):
         search(FakeClient(), [0.0] * DIM, top_k=0)
+
+
+def test_save_source_verbose_shows_delete_then_insert(capsys) -> None:
+    """verbose 时要把"先删旧版 / 再插新版"印出来。
+
+    这两步是幂等的关键：顺序错了数据会翻倍，
+    所以它俩必须看得见，而不是藏在函数里。
+    """
+    client = FakeClient()
+    save_source(client, "a.md", make_chunks(2), make_vectors(2), verbose=True)
+    out = capsys.readouterr().out
+    assert "先删旧版" in out
+    assert "再插新版" in out
+
+
+def test_save_source_quiet_by_default(capsys) -> None:
+    """默认不打印 —— store 是库，不能往调用方的日志里乱写。"""
+    save_source(FakeClient(), "a.md", make_chunks(1), make_vectors(1))
+    assert capsys.readouterr().out == ""
+
+
+def test_ensure_collection_verbose_shows_schema(capsys) -> None:
+    """新建集合时把字段和索引打出来 —— 建表参数错了很难事后发现。"""
+    ensure_collection(FakeClient(exists=False), verbose=True)
+    out = capsys.readouterr().out
+    assert "新建" in out
+    assert "AUTOINDEX" in out
+    assert "COSINE" in out
+
+
+def test_count_verbose_shows_filter(capsys) -> None:
+    """count 要说明"排除了软删除"，不然 228 和 240 的差异没法解释。"""
+    count(FakeClient(count_rows=7), verbose=True)
+    assert "is_deleted == false" in capsys.readouterr().out
